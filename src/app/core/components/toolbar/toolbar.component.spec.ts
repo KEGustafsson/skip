@@ -274,6 +274,18 @@ describe('ToolbarComponent', () => {
       expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(false);
     });
 
+    // The setting is changed in Display settings while the toolbar is on screen, so the class has
+    // to track the signal, not just its value at construction.
+    it('follows a runtime change of the setting', () => {
+      init();
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(false);
+
+      settings.pinToolbar.set(true);
+      fixture.detectChanges();
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(true);
+    });
+
     it('ignores a peek-band hover, since there is nothing to reveal', () => {
       settings.pinToolbar.set(true);
       chrome.revealed.set(true);
