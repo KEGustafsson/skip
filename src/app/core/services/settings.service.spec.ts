@@ -464,7 +464,7 @@ describe('SettingsService — default config isolation', () => {
 describe('SettingsService — hydration (pushSettings) characterization', () => {
   const APP_CONFIG_KEYS = [
     'autoNightMode', 'autoRevealToolbar', 'browserTabTitle', 'configVersion', 'keepScreenAwake',
-    'nightModeBrightness', 'notificationConfig', 'redNightMode'
+    'nightModeBrightness', 'notificationConfig', 'pinToolbar', 'redNightMode'
   ];
 
   it('a fully-populated loaded config hydrates state with zero bootstrap writes', () => {
@@ -504,6 +504,17 @@ describe('SettingsService — hydration (pushSettings) characterization', () => 
   it('honors a stored autoRevealToolbar=false (#495)', () => {
     const { service } = setupHydrated({ app: { ...loadedAppConfig(), autoRevealToolbar: false }, theme: null, dashboards: [] });
     expect(service.getAutoRevealToolbar()).toBe(false);
+  });
+
+  it('hydrates pinToolbar to false when the stored config omits it (#606)', () => {
+    const { service, patchSpy } = setupHydrated({ app: loadedAppConfig(), theme: null, dashboards: [] });
+    expect(service.getPinToolbar()).toBe(false);
+    expect(patchSpy).not.toHaveBeenCalled();
+  });
+
+  it('honors a stored pinToolbar=true (#606)', () => {
+    const { service } = setupHydrated({ app: { ...loadedAppConfig(), pinToolbar: true }, theme: null, dashboards: [] });
+    expect(service.getPinToolbar()).toBe(true);
   });
 
   // The persist-on-missing bootstrap fields: exactly these three (widgetHistoryDisabled was

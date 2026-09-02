@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostBinding, OnDestroy, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -21,14 +21,19 @@ import { PageManagerBottomSheetComponent } from '../page-manager-bottom-sheet/pa
 const PEEK_HOTZONE_PX = 8;
 
 /**
- * The auto-hiding navigation toolbar. Overlays the top of the app (never
- * reflows the grid), is shown/hidden via {@link ChromeVisibilityService}, and
+ * The auto-hiding navigation toolbar. Overlays the top of the app, is shown/hidden via
+ * {@link ChromeVisibilityService}, and
  * hosts the global controls migrated off the old sidenavs plus the page-icon
  * navigator. Hovering the bar suppresses auto-hide so it never disappears
  * mid-interaction. It is re-exposed either by clicking the transient peek strip
  * (also the keyboard/touch path) or, on a hover-capable pointer, by dwelling the
  * cursor in the top peek band; both routes call the same {@link reveal}, so the
  * existing idle-hide re-arms cleanly when the cursor leaves.
+ *
+ * Pinned is the other mode: the host stops being an overlay and becomes a row in the app shell's
+ * flex column, so the routed content below is genuinely shorter rather than covered. The dashboard
+ * grid needs no part in this — it already recomputes its cell height from its own host's height,
+ * which the reserved row shrinks.
  */
 @Component({
   selector: 'app-toolbar',
@@ -62,6 +67,11 @@ export class ToolbarComponent implements OnDestroy {
 
   /** While a layout edit is active the toolbar swaps its normal nav controls for edit contents. */
   protected readonly isEditing = computed(() => !this.dashboard.isDashboardStatic());
+  /** Reserves a real row in the shell's flex column, instead of overlaying the page (#606). */
+  @HostBinding('class.pinned') protected get pinnedClass(): boolean {
+    return this.settings.pinToolbar();
+  }
+  protected readonly pinned = this.settings.pinToolbar;
 
   private readonly notificationsInfo = toSignal(this.notifications.observerNotificationsInfo());
   protected readonly alarmCount = computed(() => this.notificationsInfo()?.alarmCount ?? 0);
@@ -71,6 +81,7 @@ export class ToolbarComponent implements OnDestroy {
 
   /** Reveals the toolbar once the cursor dwells in the top peek band, on a hover-capable pointer. */
   private readonly onDocumentPointerMove = (event: PointerEvent): void => {
+    if (this.pinned()) return; // nothing to reveal
     if (event.pointerType === 'touch') return; // touch has no hover; the tap-the-peek-strip path stays
     const inZone = event.clientY <= PEEK_HOTZONE_PX;
     if (inZone && !this.inPeekZone && !this.chrome.revealed()) {

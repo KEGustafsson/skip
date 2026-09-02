@@ -63,6 +63,7 @@ export class SettingsDisplayComponent implements OnInit {
   protected browserTabTitle = model<string>('Skip');
   protected keepScreenAwake = model<boolean>(true);
   protected autoRevealToolbar = model<boolean>(true);
+  protected pinToolbar = model<boolean>(false);
   // Guards concurrent plugin enable checks to avoid stale promise handlers mutating state
   private _pluginCheckSeq = 0;
 
@@ -81,6 +82,7 @@ export class SettingsDisplayComponent implements OnInit {
     this.browserTabTitle.set(this.settings.getBrowserTabTitle());
     this.keepScreenAwake.set(this.settings.getKeepScreenAwake());
     this.autoRevealToolbar.set(this.settings.getAutoRevealToolbar());
+    this.pinToolbar.set(this.settings.getPinToolbar());
   }
 
   protected saveAllSettings():void {
@@ -128,6 +130,7 @@ export class SettingsDisplayComponent implements OnInit {
     this.settings.setBrowserTabTitle(this.browserTabTitle());
     this.settings.setKeepScreenAwake(this.keepScreenAwake());
     this.settings.setAutoRevealToolbar(this.autoRevealToolbar());
+    this.settings.setPinToolbar(this.pinToolbar());
     this.displayForm()?.form.markAsPristine();
     if (announce) {
       this.toast.show("Configuration saved", 1000, true, 'message');

@@ -138,10 +138,12 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       }
     });
 
-    // Hand the "show the toolbar automatically" setting to the service that owns chrome visibility,
-    // which gates its own boot dwell and every revealAuto() below on it (#495).
+    // Hand the toolbar visibility settings to the service that owns chrome visibility. Auto-reveal
+    // gates its boot dwell and every revealAuto() below (#495); pinning holds it open and outranks
+    // auto-reveal, for a page whose widget swallows every reveal gesture (#606).
     effect(() => {
       this.chrome.setAutoReveal(this.settings.autoRevealToolbar());
+      this.chrome.setPinned(this.settings.pinToolbar());
     });
 
     // Reveal the auto-hiding toolbar on every page change: its page-icon strip

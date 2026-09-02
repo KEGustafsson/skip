@@ -70,6 +70,7 @@ describe('AppComponent', () => {
     reveal: ReturnType<typeof vi.fn>;
     revealAuto: ReturnType<typeof vi.fn>;
     setAutoReveal: ReturnType<typeof vi.fn>;
+    setPinned: ReturnType<typeof vi.fn>;
     hide: ReturnType<typeof vi.fn>;
     pulsePeek: ReturnType<typeof vi.fn>;
   };
@@ -95,7 +96,7 @@ describe('AppComponent', () => {
       setKeepAwake: vi.fn(),
     };
     appService = { toggleNightMode: vi.fn() };
-    chrome = { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() };
+    chrome = { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() };
     toast = { show: vi.fn().mockReturnValue({ onAction: () => new Subject() }) };
     reloadService = { reload: vi.fn() };
     appNetworkInitServiceStub.bootstrapIssue$.next({ reason: 'none' });
@@ -361,6 +362,35 @@ describe('AppComponent', () => {
       expect(chrome.setAutoReveal).toHaveBeenCalledWith(false);
     });
 
+    // Same reactive-signal requirement as withAutoReveal above: a plain mockReturnValue would leave
+    // the effect with no dependency and make the runtime-change assertion unfalsifiable.
+    function withPinToolbar(pinned: boolean): WritableSignal<boolean> {
+      const flag = signal(pinned);
+      const settings = TestBed.inject(SettingsService);
+      vi.spyOn(settings, 'pinToolbar').mockImplementation(() => flag());
+      return flag;
+    }
+
+    it('hands the stored pin setting to the visibility service at boot (#606)', () => {
+      withPinToolbar(true);
+      const fixture = TestBed.createComponent(AppComponent);
+      fixture.detectChanges();
+
+      expect(chrome.setPinned).toHaveBeenCalledWith(true);
+    });
+
+    it('hands a runtime change of the pin setting to the service (#606)', () => {
+      const flag = withPinToolbar(false);
+      const fixture = TestBed.createComponent(AppComponent);
+      fixture.detectChanges();
+      chrome.setPinned.mockClear();
+
+      flag.set(true);
+      fixture.detectChanges();
+
+      expect(chrome.setPinned).toHaveBeenCalledWith(true);
+    });
+
     it('hands a runtime change of the setting to the service', () => {
       const flag = withAutoReveal(true);
       const fixture = TestBed.createComponent(AppComponent);
@@ -508,7 +538,7 @@ describe('AppComponent — embed mode chrome', () => {
         { provide: DashboardService, useValue: dashboard },
         { provide: uiEventService, useValue: uiEvent },
         { provide: AppService, useValue: { toggleNightMode: vi.fn() } },
-        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
+        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
         { provide: ToastService, useValue: { show: vi.fn().mockReturnValue({ onAction: () => new Subject() }) } },
         { provide: ReloadService, useValue: { reload: vi.fn() } },
         { provide: EmbedModeService, useValue: { embed: () => embed, profile: () => null } },
@@ -574,7 +604,7 @@ describe('AppComponent — embed read-only invariants (#216 E6)', () => {
         { provide: DashboardService, useValue: dashboard },
         { provide: uiEventService, useValue: uiEvent },
         { provide: AppService, useValue: { toggleNightMode: vi.fn() } },
-        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
+        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
         { provide: ToastService, useValue: toast },
         { provide: ReloadService, useValue: { reload: vi.fn() } },
         { provide: EmbedModeService, useValue: { embed: () => opts.embed, profile: () => null } },
@@ -703,7 +733,7 @@ describe('AppComponent — embed boot performs zero server-config writes (#216 E
         { provide: AppNetworkInitService, useValue: appNetworkInitServiceStub },
         { provide: uiEventService, useValue: uiEvent },
         { provide: AppService, useValue: { toggleNightMode: vi.fn() } },
-        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
+        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
         { provide: ToastService, useValue: { show: vi.fn().mockReturnValue({ onAction: () => new Subject() }) } },
         { provide: ReloadService, useValue: { reload: vi.fn() } },
         { provide: EmbedModeService, useValue: { embed: () => embed, profile: () => null } },

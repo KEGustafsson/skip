@@ -127,4 +127,44 @@ describe('ChromeVisibilityService', () => {
     service.hide();
     expect(service.revealed()).toBe(false);
   });
+
+  describe('pinned', () => {
+    it('holds the toolbar open through the idle hide and an explicit hide', () => {
+      service.setPinned(true);
+
+      expect(service.revealed()).toBe(true);
+      vi.advanceTimersByTime(CHROME_BOOT_DWELL_MS + CHROME_IDLE_HIDE_MS);
+      expect(service.revealed()).toBe(true);
+
+      service.hide();
+      expect(service.revealed()).toBe(true);
+    });
+
+    it('reveals a toolbar that had already hidden', () => {
+      vi.advanceTimersByTime(CHROME_BOOT_DWELL_MS);
+      expect(service.revealed()).toBe(false);
+
+      service.setPinned(true);
+      expect(service.revealed()).toBe(true);
+    });
+
+    it('outranks a disabled auto-reveal', () => {
+      service.setAutoReveal(false);
+      service.setPinned(true);
+
+      expect(service.revealed()).toBe(true);
+      service.revealAuto();
+      vi.advanceTimersByTime(CHROME_IDLE_HIDE_MS);
+      expect(service.revealed()).toBe(true);
+    });
+
+    it('hands the toolbar back to the idle timer when unpinned', () => {
+      service.setPinned(true);
+      service.setPinned(false);
+
+      expect(service.revealed()).toBe(true);
+      vi.advanceTimersByTime(CHROME_IDLE_HIDE_MS);
+      expect(service.revealed()).toBe(false);
+    });
+  });
 });

@@ -29,12 +29,17 @@ export const CHROME_HOVER_DWELL_MS = 200;
  * reveal — go through {@link revealAuto} and can be switched off wholesale via
  * {@link setAutoReveal}. {@link reveal} always shows the toolbar, so every user-initiated route to
  * it keeps working regardless.
+ *
+ * {@link setPinned} is the opposite end of that range: the toolbar stays open and nothing hides it.
+ * A page whose widget swallows pointer input (an interactive iframe, Freeboard-SK) leaves no gesture
+ * that can summon the toolbar back, so on such a page pinning is the only way to reach it (#606).
  */
 @Injectable({ providedIn: 'root' })
 export class ChromeVisibilityService {
   private readonly _revealed = signal(true);
   private readonly _peeking = signal(false);
   private autoReveal = true;
+  private pinned = false;
 
   /** True while the full toolbar is shown. */
   public readonly revealed = this._revealed.asReadonly();
@@ -74,9 +79,24 @@ export class ChromeVisibilityService {
     if (!enabled) this.hide();
   }
 
-  /** Hide the toolbar immediately, unless hiding is currently suppressed. */
+  /**
+   * Hold the toolbar open, or hand it back to the idle timer. Pinning outranks
+   * {@link setAutoReveal}: the toolbar is shown at once and stays shown, whether or not the app is
+   * allowed to reveal it on its own.
+   */
+  public setPinned(pinned: boolean): void {
+    this.pinned = pinned;
+    if (pinned) {
+      this.clearIdle();
+      this._revealed.set(true);
+    } else {
+      this.reveal();
+    }
+  }
+
+  /** Hide the toolbar immediately, unless pinned or hiding is currently suppressed. */
   public hide(): void {
-    if (this.suppressCount > 0) return;
+    if (this.pinned || this.suppressCount > 0) return;
     this.clearIdle();
     this._revealed.set(false);
   }
@@ -110,7 +130,7 @@ export class ChromeVisibilityService {
 
   private scheduleHide(ms: number): void {
     this.clearIdle();
-    if (this.suppressCount > 0) return;
+    if (this.pinned || this.suppressCount > 0) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       this._revealed.set(false);

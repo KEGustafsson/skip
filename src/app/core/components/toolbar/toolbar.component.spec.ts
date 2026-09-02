@@ -39,7 +39,7 @@ const uiEvent = {
   fullscreenStatus: signal(false),
 };
 const app = { isNightMode: signal(false), toggleDayNightMode: vi.fn(), toggleNightMode: vi.fn(), appVersion: signal('1.0.0') };
-const settings = { autoNightMode: signal(false) };
+const settings = { autoNightMode: signal(false), pinToolbar: signal(false) };
 const dialog = { openNotifications: vi.fn() };
 const router = { navigate: vi.fn(), events: EMPTY };
 const alarmCount = signal(0);
@@ -254,6 +254,37 @@ describe('ToolbarComponent', () => {
     chrome.revealed.set(true);
     init();
     expect(el.querySelector('.toolbar-host')!.classList.contains('revealed')).toBe(true);
+  });
+
+  describe('pinned (#606)', () => {
+    afterEach(() => settings.pinToolbar.set(false));
+
+    // The class is what moves the component host out of overlay mode into a row of the shell's flex
+    // column; without it the pinned toolbar would cover the top of the page instead of shortening it.
+    it('marks the component host as pinned so it claims a layout row', () => {
+      settings.pinToolbar.set(true);
+      init();
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(true);
+    });
+
+    it('leaves the host unpinned by default', () => {
+      init();
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(false);
+    });
+
+    it('ignores a peek-band hover, since there is nothing to reveal', () => {
+      settings.pinToolbar.set(true);
+      chrome.revealed.set(true);
+      init();
+      chrome.reveal.mockClear();
+
+      (fixture.componentInstance as unknown as { onDocumentPointerMove: (e: PointerEvent) => void })
+        .onDocumentPointerMove({ clientY: 1, pointerType: 'mouse' } as PointerEvent);
+
+      expect(chrome.reveal).not.toHaveBeenCalled();
+    });
   });
 
   describe('hover-reveal (peek-band dwell)', () => {

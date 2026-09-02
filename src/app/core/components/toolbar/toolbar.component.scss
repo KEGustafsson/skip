@@ -3,6 +3,13 @@
   --peek-height: 8px;
 }
 
+// Pinned: the host stops being a zero-height anchor for an overlay and becomes a row in the app
+// shell's flex column, so the routed content below it is shorter by exactly the toolbar's height.
+:host(.pinned) {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .toolbar-host {
   position: fixed;
   top: 0;
@@ -30,6 +37,21 @@
 
 .toolbar-host.revealed .toolbar {
   transform: translateY(0);
+}
+
+:host(.pinned) .toolbar-host {
+  position: static;
+  pointer-events: auto;
+}
+
+:host(.pinned) .toolbar {
+  transform: none;
+  transition: none;
+}
+
+// Nothing to reveal, so the cue and its target go away.
+:host(.pinned) .peek-strip {
+  display: none;
 }
 
 .peek-strip {
