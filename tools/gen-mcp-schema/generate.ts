@@ -346,6 +346,9 @@ function toCatalogEntry(raw: Record<string, unknown>, file: string): WidgetCatal
   if (raw.anyOfPlugins !== undefined) {
     entry.anyOfPlugins = requireStringArray(raw, 'anyOfPlugins', file).slice().sort();
   }
+  if (raw.anyOfApis !== undefined) {
+    entry.anyOfApis = requireStringArray(raw, 'anyOfApis', file).slice().sort();
+  }
   return entry;
 }
 

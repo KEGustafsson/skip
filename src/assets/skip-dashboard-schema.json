@@ -695,6 +695,9 @@
       "selector": "widget-anchor-alarm"
     },
     {
+      "anyOfApis": [
+        "/signalk/v2/api/vessels/self/autopilots"
+      ],
       "anyOfPlugins": [
         "autopilot",
         "pypilot-autopilot-provider"
