@@ -9,6 +9,7 @@ import { DashboardComponent } from './dashboard.component';
 import { Dashboard, DashboardService } from '../../services/dashboard.service';
 import { ToastService } from '../../services/toast.service';
 import { PluginConfigClientService } from '../../services/plugin-config-client.service';
+import { WidgetDescription, WidgetService } from '../../services/widget.service';
 import { DialogService } from '../../services/dialog.service';
 import { uiEventService } from '../../services/uiEvent.service';
 import { EmbedModeService } from '../../services/embed-mode.service';
@@ -389,6 +390,49 @@ describe('DashboardComponent', () => {
         expect((component as unknown as {
             addWidgetToGrid: Mock;
         }).addWidgetToGrid).not.toHaveBeenCalled();
+    });
+
+    describe('any-of dependency gate', () => {
+        const autopilotWidget = {
+            name: 'Autopilot Head',
+            requiredPlugins: [],
+            anyOfPlugins: ['autopilot'],
+            anyOfApis: ['/signalk/v2/api/vessels/self/autopilots'],
+            selector: 'widget-autopilot'
+        } as unknown as WidgetDescription;
+
+        const tryAdd = (widget: WidgetDescription) => (component as unknown as {
+            tryAddWidgetWithDependencyChecks: (w: WidgetDescription, x: number, y: number) => Promise<void>;
+        }).tryAddWidgetWithDependencyChecks(widget, 1, 1);
+
+        beforeEach(() => {
+            // The any-of plugin is installed but inactive: the plugin list alone blocks the add.
+            vi.mocked(TestBed.inject(PluginConfigClientService).getPlugin)
+                .mockResolvedValue({ ok: true, data: { state: { enabled: false } } } as unknown as
+                    Awaited<ReturnType<PluginConfigClientService['getPlugin']>>);
+            vi.spyOn(component as unknown as { addWidgetToGrid: () => void }, 'addWidgetToGrid')
+                .mockImplementation(() => undefined);
+        });
+
+        const addWidgetToGrid = () => (component as unknown as { addWidgetToGrid: Mock }).addWidgetToGrid;
+
+        it('blocks the widget when no provider API answers either', async () => {
+            vi.spyOn(TestBed.inject(WidgetService), 'hasAnyApiProvider').mockResolvedValue(false);
+
+            await tryAdd(autopilotWidget);
+
+            expect(addWidgetToGrid()).not.toHaveBeenCalled();
+            expect(TestBed.inject(ToastService).show).toHaveBeenCalled();
+        });
+
+        it('adds the widget when a provider API answers, whatever the plugin list reports', async () => {
+            vi.spyOn(TestBed.inject(WidgetService), 'hasAnyApiProvider').mockResolvedValue(true);
+
+            await tryAdd(autopilotWidget);
+
+            expect(addWidgetToGrid()).toHaveBeenCalled();
+            expect(TestBed.inject(ToastService).show).not.toHaveBeenCalled();
+        });
     });
 
     it('should copy widget without creating a new grid item', () => {

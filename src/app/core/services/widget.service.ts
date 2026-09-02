@@ -1,5 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { Type } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { lastValueFrom } from 'rxjs';
 import { PluginConfigClientService } from './plugin-config-client.service';
 import type { IWidgetSvcConfig } from '../interfaces/widgets-interface';
 // Widget view components are NOT imported statically. They are loaded on demand through the lazy
@@ -20,13 +22,15 @@ export enum WidgetCategories {
  *
  * - requiredPlugins: All listed plugins must be enabled for the widget to function.
  * - anyOfPlugins: If present, at least one listed plugin must be installed and active for the widget to function.
+ * - anyOfApis: If present, a server API that reports at least one provider satisfies the any-of gate on its own.
  *
  * Example:
  * {
  *   name: 'Autopilot',
  *   ...
  *   requiredPlugins: [],
- *   anyOfPlugins: ['autopilot', 'pypilot-autopilot-provider']
+ *   anyOfPlugins: ['autopilot', 'pypilot-autopilot-provider'],
+ *   anyOfApis: ['/signalk/v2/api/vessels/self/autopilots']
  * }
  */
 export interface WidgetDescription {
@@ -54,6 +58,15 @@ export interface WidgetDescription {
     * If omitted or empty, no any-of plugin logic is applied.
    */
     anyOfPlugins?: string[];
+  /**
+   * Signal K endpoints that satisfy the any-of plugin gate on their own, each answering with a
+   * collection of providers (an object or array). A provider-based API — Autopilot API v2 — is
+   * served by plugins Skip cannot enumerate by id, so an endpoint that reports one or more
+   * providers makes the widget available whatever `anyOfPlugins` reports.
+   *
+   * `requiredPlugins` still applies: these endpoints relax the any-of gate only.
+   */
+  anyOfApis?: string[];
   /**
    * The category of the widget, used for filtering in the widget list.
    */
@@ -106,6 +119,7 @@ export interface WidgetDescriptionWithPluginStatus extends WidgetDescription {
 })
 export class WidgetService {
   private readonly _pluginConfig = inject(PluginConfigClientService);
+  private readonly _http = inject(HttpClient);
   private readonly _widgetCategories = [...WIDGET_CATEGORIES];
   // Cache for selector -> component Type resolutions to avoid repeated definition scans
   // Resolved component-type promises, deduped per selector so repeat/concurrent lookups reuse one import().
@@ -477,6 +491,7 @@ export class WidgetService {
       category: 'Component',
       requiredPlugins: [],
       anyOfPlugins: ['autopilot', 'pypilot-autopilot-provider'],
+      anyOfApis: ['/signalk/v2/api/vessels/self/autopilots'],
       selector: 'widget-autopilot',
       componentClassName: 'WidgetAutopilotComponent'
     },
@@ -719,7 +734,7 @@ export class WidgetService {
    * For each widget, this method:
     * - Checks all unique plugin dependencies for installation/availability using the PluginConfigClientService (each dependency is checked only once, even if used by multiple widgets).
    * - Adds the following properties to each widget:
-    * - `isDependencyValid`: `true` if all required plugins are installed and, if anyOfPlugins is present, at least one any-of plugin is installed. Otherwise `false`.
+    * - `isDependencyValid`: `true` if all required plugins are installed and, if anyOfPlugins is present, at least one any-of plugin is installed or one of the widget's `anyOfApis` endpoints reports a provider. Otherwise `false`.
     * - `pluginsStatus`: an array of objects, each with `{ name: string, enabled: boolean, required: boolean }` for every dependency (required and optional).
     *   Note: in this selection-stage payload, `enabled` indicates dependency availability (installed/reachable), not active runtime plugin state.
    *
@@ -753,7 +768,7 @@ export class WidgetService {
     );
 
     // Map widgets using the cached results
-    return this._widgetDefinition.map(widget => {
+    const widgetsWithPluginStatus = this._widgetDefinition.map(widget => {
       const required = widget.requiredPlugins || [];
       const anyOf = widget.anyOfPlugins || [];
 
@@ -779,5 +794,63 @@ export class WidgetService {
         pluginsStatus
       };
     });
+
+    // Only widgets the plugin lists just rejected are worth an API probe, and only when their
+    // required plugins are all present — an API provider never stands in for a required plugin.
+    const apiCandidates = new Set(widgetsWithPluginStatus.filter(widget =>
+      !widget.isDependencyValid
+      && widget.pluginsStatus.every(status => !status.required || status.enabled)
+      && (widget.anyOfApis?.length ?? 0) > 0
+    ));
+    const apiCache = await this.probeApiProviders(
+      [...apiCandidates].flatMap(widget => widget.anyOfApis ?? [])
+    );
+
+    return widgetsWithPluginStatus.map(widget =>
+      apiCandidates.has(widget) && widget.anyOfApis?.some(api => apiCache[api])
+        ? { ...widget, isDependencyValid: true }
+        : widget
+    );
+  }
+
+  /**
+   * Reports whether any of the given Signal K endpoints answers with at least one provider.
+   *
+   * Purpose:
+   * - Lets a widget gated on `anyOfPlugins` be added when a provider-based API already serves it
+   *   through a plugin Skip does not know by id (e.g. the Autopilot API v2 provider registry).
+   *
+   * @param apis Endpoint paths to probe. Empty or undefined resolves to `false`.
+   * @returns Promise resolving to `true` when one endpoint reports a non-empty provider collection.
+   */
+  public async hasAnyApiProvider(apis: string[] | undefined): Promise<boolean> {
+    if (!apis?.length) return false;
+    const results = await this.probeApiProviders(apis);
+    return Object.values(results).some(Boolean);
+  }
+
+  /** Probes each unique endpoint once, mapping it to whether it reports a provider. */
+  private async probeApiProviders(apis: string[]): Promise<Record<string, boolean>> {
+    const cache: Record<string, boolean> = {};
+    await Promise.all(
+      [...new Set(apis)].map(async api => {
+        cache[api] = await this.hasProvider(api);
+      })
+    );
+    return cache;
+  }
+
+  /**
+   * A provider registry answers with a collection keyed by instance (or an array). An unreachable
+   * endpoint, an unauthorized one, and an empty registry all read the same here: no provider.
+   */
+  private async hasProvider(api: string): Promise<boolean> {
+    try {
+      const providers = await lastValueFrom(this._http.get<unknown>(api));
+      if (Array.isArray(providers)) return providers.length > 0;
+      return !!providers && typeof providers === 'object' && Object.keys(providers).length > 0;
+    } catch {
+      return false;
+    }
   }
 }
