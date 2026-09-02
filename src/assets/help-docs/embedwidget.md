@@ -60,7 +60,7 @@ Two independent rules apply: the embedded site's framing policy (`X-Frame-Option
    - Some websites may allow embedding only for specific trusted domains, which most probably, do not include your Signal K installation.
 
 3. **Consequences of Cross-Origin Content in Skip**:
-   - When you enable the "Enable Input" Embed widget option, Skip needs to inject gestures within the embedded application to trigger page navigation or reveal the auto-hiding toolbar. To do this, Skip scripts the iframe. The same-origin policy only permits this for same-origin content, so over a **cross-origin** embed the gestures will not work. If you have a full-screen cross-origin Embed widget, you could get stuck with no way to change pages or reveal the toolbar.
+   - When you enable the "Enable Input" Embed widget option, Skip needs to inject gestures within the embedded application to trigger page navigation or reveal the auto-hiding toolbar. To do this, Skip scripts the iframe. The same-origin policy only permits this for same-origin content, so over a **cross-origin** embed the gestures will not work. If you have a full-screen cross-origin Embed widget, no gesture will reach the toolbar. Turn on **Keep the toolbar on screen** in **Settings > Display > Toolbar** to keep page navigation available on such a page; the toolbar takes a row of its own and the widget below it is made shorter to fit.
 
 4. **No Workaround for Restricted Websites**:
    - If the application does not allow iframe embedding, there is no way to bypass this restriction without the application owner's adding some kind of authorization for you. This is a browser-enforced security feature.

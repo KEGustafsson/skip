@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostBinding, OnDestroy, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -41,6 +41,7 @@ const PEEK_HOTZONE_PX = 8;
   imports: [MatButtonModule, MatIconModule, MatBadgeModule, MatMenuModule, PageNavControlComponent],
   templateUrl: './toolbar.component.html',
   styleUrl: './toolbar.component.scss',
+  host: { '[class.pinned]': 'pinned()' },
 })
 export class ToolbarComponent implements OnDestroy {
   protected readonly chrome = inject(ChromeVisibilityService);
@@ -67,11 +68,10 @@ export class ToolbarComponent implements OnDestroy {
 
   /** While a layout edit is active the toolbar swaps its normal nav controls for edit contents. */
   protected readonly isEditing = computed(() => !this.dashboard.isDashboardStatic());
-  /** Reserves a real row in the shell's flex column, instead of overlaying the page (#606). */
-  @HostBinding('class.pinned') protected get pinnedClass(): boolean {
-    return this.settings.pinToolbar();
-  }
-  protected readonly pinned = this.settings.pinToolbar;
+  /** Reserves a real row in the shell's flex column, instead of overlaying the page (#606). Read
+   *  from the visibility service, not the setting, so the reserved row and the `revealed` state the
+   *  template gates `inert` on cannot disagree. */
+  protected readonly pinned = this.chrome.pinned;
 
   private readonly notificationsInfo = toSignal(this.notifications.observerNotificationsInfo());
   protected readonly alarmCount = computed(() => this.notificationsInfo()?.alarmCount ?? 0);

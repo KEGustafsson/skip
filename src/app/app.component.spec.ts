@@ -67,6 +67,7 @@ describe('AppComponent', () => {
   let appService: { toggleNightMode: ReturnType<typeof vi.fn> };
   let chrome: {
     revealed: ReturnType<typeof signal<boolean>>;
+    pinned: ReturnType<typeof signal<boolean>>;
     reveal: ReturnType<typeof vi.fn>;
     revealAuto: ReturnType<typeof vi.fn>;
     setAutoReveal: ReturnType<typeof vi.fn>;
@@ -96,7 +97,7 @@ describe('AppComponent', () => {
       setKeepAwake: vi.fn(),
     };
     appService = { toggleNightMode: vi.fn() };
-    chrome = { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() };
+    chrome = { revealed: signal(false), pinned: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() };
     toast = { show: vi.fn().mockReturnValue({ onAction: () => new Subject() }) };
     reloadService = { reload: vi.fn() };
     appNetworkInitServiceStub.bootstrapIssue$.next({ reason: 'none' });
@@ -538,7 +539,7 @@ describe('AppComponent — embed mode chrome', () => {
         { provide: DashboardService, useValue: dashboard },
         { provide: uiEventService, useValue: uiEvent },
         { provide: AppService, useValue: { toggleNightMode: vi.fn() } },
-        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
+        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), pinned: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
         { provide: ToastService, useValue: { show: vi.fn().mockReturnValue({ onAction: () => new Subject() }) } },
         { provide: ReloadService, useValue: { reload: vi.fn() } },
         { provide: EmbedModeService, useValue: { embed: () => embed, profile: () => null } },
@@ -604,7 +605,7 @@ describe('AppComponent — embed read-only invariants (#216 E6)', () => {
         { provide: DashboardService, useValue: dashboard },
         { provide: uiEventService, useValue: uiEvent },
         { provide: AppService, useValue: { toggleNightMode: vi.fn() } },
-        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
+        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), pinned: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
         { provide: ToastService, useValue: toast },
         { provide: ReloadService, useValue: { reload: vi.fn() } },
         { provide: EmbedModeService, useValue: { embed: () => opts.embed, profile: () => null } },
@@ -733,7 +734,7 @@ describe('AppComponent — embed boot performs zero server-config writes (#216 E
         { provide: AppNetworkInitService, useValue: appNetworkInitServiceStub },
         { provide: uiEventService, useValue: uiEvent },
         { provide: AppService, useValue: { toggleNightMode: vi.fn() } },
-        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
+        { provide: ChromeVisibilityService, useValue: { revealed: signal(false), pinned: signal(false), reveal: vi.fn(), revealAuto: vi.fn(), setAutoReveal: vi.fn(), setPinned: vi.fn(), hide: vi.fn(), pulsePeek: vi.fn() } },
         { provide: ToastService, useValue: { show: vi.fn().mockReturnValue({ onAction: () => new Subject() }) } },
         { provide: ReloadService, useValue: { reload: vi.fn() } },
         { provide: EmbedModeService, useValue: { embed: () => embed, profile: () => null } },

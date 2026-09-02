@@ -222,6 +222,15 @@ describe('SettingsService — storage routing (server applicationData only)', ()
     expect(localStorage.getItem('skip.appConfig')).toBeNull();
   });
 
+  it('setPinToolbar persists the flag in the app blob (#606)', () => {
+    const { service, patchSpy } = setup();
+
+    service.setPinToolbar(true);
+
+    expect(patchSpy).toHaveBeenCalledWith('IAppConfig', expect.objectContaining({ pinToolbar: true }));
+    expect(service.getPinToolbar()).toBe(true);
+  });
+
   it('setAutoRevealToolbar persists the flag in the app blob (#495)', () => {
     const { service, patchSpy } = setup();
 

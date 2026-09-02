@@ -39,12 +39,14 @@ export class ChromeVisibilityService {
   private readonly _revealed = signal(true);
   private readonly _peeking = signal(false);
   private autoReveal = true;
-  private pinned = false;
+  private readonly _pinned = signal(false);
 
   /** True while the full toolbar is shown. */
   public readonly revealed = this._revealed.asReadonly();
   /** True during the transient edge-peek cue. */
   public readonly peeking = this._peeking.asReadonly();
+  /** True while the toolbar is held open and claims a layout row instead of overlaying (#606). */
+  public readonly pinned = this._pinned.asReadonly();
 
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private peekTimer: ReturnType<typeof setTimeout> | null = null;
@@ -83,20 +85,31 @@ export class ChromeVisibilityService {
    * Hold the toolbar open, or hand it back to the idle timer. Pinning outranks
    * {@link setAutoReveal}: the toolbar is shown at once and stays shown, whether or not the app is
    * allowed to reveal it on its own.
+   *
+   * A no-change call does nothing. The caller is an effect that pushes both toolbar settings on
+   * every run, so an unpinned service is told `false` routinely — including straight after
+   * {@link setAutoReveal} retracted the boot dwell, which touching visibility here would undo.
+   *
+   * Unpinning leaves a toolbar that is currently on screen, so it hands that toolbar to whichever
+   * rule now governs it: the idle timer, or an immediate retraction on a display whose owner
+   * switched automatic reveal off.
    */
   public setPinned(pinned: boolean): void {
-    this.pinned = pinned;
+    if (this._pinned() === pinned) return;
+    this._pinned.set(pinned);
     if (pinned) {
       this.clearIdle();
       this._revealed.set(true);
+    } else if (this.autoReveal) {
+      this.scheduleHide(CHROME_IDLE_HIDE_MS);
     } else {
-      this.reveal();
+      this.hide();
     }
   }
 
   /** Hide the toolbar immediately, unless pinned or hiding is currently suppressed. */
   public hide(): void {
-    if (this.pinned || this.suppressCount > 0) return;
+    if (this._pinned() || this.suppressCount > 0) return;
     this.clearIdle();
     this._revealed.set(false);
   }
@@ -130,7 +143,7 @@ export class ChromeVisibilityService {
 
   private scheduleHide(ms: number): void {
     this.clearIdle();
-    if (this.pinned || this.suppressCount > 0) return;
+    if (this._pinned() || this.suppressCount > 0) return;
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       this._revealed.set(false);
