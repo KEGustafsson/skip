@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, inject, AfterViewInit, effect, Signal, DestroyRef, signal, viewChild, ElementRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, inject, AfterViewInit, effect, Signal, DestroyRef, signal, untracked, viewChild, ElementRef } from '@angular/core';
 import { Router, NavigationEnd, RouterModule } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
@@ -142,8 +142,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     // gates its boot dwell and every revealAuto() below (#495); pinning holds it open and outranks
     // auto-reveal, for a page whose widget swallows every reveal gesture (#606).
     effect(() => {
-      this.chrome.setAutoReveal(this.settings.autoRevealToolbar());
-      this.chrome.setPinned(this.settings.pinToolbar());
+      const autoReveal = this.settings.autoRevealToolbar();
+      const pinned = this.settings.pinToolbar();
+      // Untracked: the service holds its pinned state in a signal that its own guards read, so a
+      // tracked call would put the effect's write back among its dependencies.
+      untracked(() => {
+        this.chrome.setAutoReveal(autoReveal);
+        this.chrome.setPinned(pinned);
+      });
     });
 
     // Reveal the auto-hiding toolbar on every page change: its page-icon strip

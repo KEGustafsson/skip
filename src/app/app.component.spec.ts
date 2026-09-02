@@ -505,6 +505,74 @@ describe('AppComponent', () => {
   });
 });
 
+// Self-contained, and deliberately WITHOUT a ChromeVisibilityService stub: every other AppComponent
+// block mocks it, so the effect that pushes both toolbar settings is asserted only as "was called
+// with". The interaction between the two calls is what regressed (#606 undid #495), and it is only
+// observable against the real service.
+describe('AppComponent — toolbar settings effect against the real visibility service', () => {
+  async function render(autoReveal: boolean, pinned: boolean): Promise<ChromeVisibilityService> {
+    const appNetworkInitServiceStub = {
+      bootstrapStatus$: new BehaviorSubject<'starting' | 'ready' | 'degraded'>('ready'),
+      bootstrapIssue$: new BehaviorSubject({ reason: 'none' }),
+    };
+    const dashboard = {
+      isDashboardStatic: signal(true),
+      activeDashboard: signal<number | null>(null),
+      dashboards: signal<unknown[]>([]),
+      navigateToNextDashboard: vi.fn(),
+      navigateToPreviousDashboard: vi.fn(),
+      setStaticDashboard: vi.fn(),
+      isReadOnlySession: signal(false),
+      widgetAction$: new Subject(),
+    };
+    const uiEvent = {
+      isDragging: signal(false),
+      addHotkeyListener: vi.fn(),
+      removeHotkeyListener: vi.fn(),
+      toggleFullScreen: vi.fn(),
+      setKeepAwake: vi.fn(),
+    };
+
+    TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [
+        { provide: AppNetworkInitService, useValue: appNetworkInitServiceStub },
+        { provide: DashboardService, useValue: dashboard },
+        { provide: uiEventService, useValue: uiEvent },
+        { provide: AppService, useValue: { toggleNightMode: vi.fn() } },
+        { provide: ToastService, useValue: { show: vi.fn().mockReturnValue({ onAction: () => new Subject() }) } },
+        { provide: ReloadService, useValue: { reload: vi.fn() } },
+        { provide: EmbedModeService, useValue: { embed: () => false, profile: () => null } },
+      ],
+    });
+    TestBed.overrideComponent(ToolbarComponent, { set: { template: '<span class="stub-toolbar"></span>', imports: [] } });
+    await TestBed.compileComponents();
+
+    const settings = TestBed.inject(SettingsService);
+    vi.spyOn(settings, 'autoRevealToolbar').mockImplementation(() => autoReveal);
+    vi.spyOn(settings, 'pinToolbar').mockImplementation(() => pinned);
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    return TestBed.inject(ChromeVisibilityService);
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('leaves the toolbar hidden at boot when automatic reveal is off and pinning is off (#495)', async () => {
+    const chrome = await render(false, false);
+
+    expect(chrome.revealed()).toBe(false);
+  });
+
+  it('holds the toolbar open at boot when pinned, even with automatic reveal off (#606)', async () => {
+    const chrome = await render(false, true);
+
+    expect(chrome.revealed()).toBe(true);
+    expect(chrome.pinned()).toBe(true);
+  });
+});
+
 // Self-contained (no shared beforeEach): the toolbar mount gate depends on the injected
 // EmbedModeService, which the main suite does not stub. Under embed the toolbar is unmounted from
 // the DOM entirely (not CSS-hidden). (#216 E6)
