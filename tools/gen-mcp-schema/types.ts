@@ -39,6 +39,8 @@ export interface WidgetCatalogEntry {
   requiredPlugins: string[];
   /** Plugins where at least one must be enabled, if present. */
   anyOfPlugins?: string[];
+  /** Signal K endpoints that satisfy the any-of gate when they report a provider, if present. */
+  anyOfApis?: string[];
 }
 
 /**

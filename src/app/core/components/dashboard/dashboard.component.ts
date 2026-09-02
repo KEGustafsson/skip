@@ -12,7 +12,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs/operators';
 import { uiEventService } from '../../services/uiEvent.service';
 import { isBlockingOverlayOpen } from '../../utils/hotkey-target.util';
-import { WidgetDescription } from '../../services/widget.service';
+import { WidgetDescription, WidgetService } from '../../services/widget.service';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { Router } from '@angular/router';
 import { WidgetHost2Component } from '../widget-host2/widget-host2.component';
@@ -83,6 +83,7 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
   private readonly _destroyRef = inject(DestroyRef);
   private readonly _uiEvent = inject(uiEventService);
   private readonly _pluginConfig = inject(PluginConfigClientService);
+  private readonly _widgets = inject(WidgetService);
   protected readonly _router = inject(Router);
   private readonly _hostEl = inject(ElementRef<HTMLElement>);
   protected readonly dashboardStaticView = computed(() => this.dashboard.isDashboardStatic());
@@ -497,7 +498,10 @@ export class DashboardComponent implements AfterViewInit, OnDestroy {
     const hasAnyOfPluginsInstalled = anyOfState.installed.length > 0;
     const hasAnyOfPluginsEnabled = anyOfState.enabled.length > 0;
 
-    if (hasAnyOfPluginsInstalled && !hasAnyOfPluginsEnabled) {
+    // A provider-based API serves the widget through plugins Skip cannot name, so probe it before
+    // blocking on the plugin list — but only then, to keep the usual add path free of a round trip.
+    if (hasAnyOfPluginsInstalled && !hasAnyOfPluginsEnabled
+        && !(await this._widgets.hasAnyApiProvider(widget.anyOfApis))) {
       this.notifyAnyOfPluginsRequireManualActivation(widget, anyOfState.installed);
       return;
     }

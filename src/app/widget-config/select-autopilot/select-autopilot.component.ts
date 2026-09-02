@@ -29,7 +29,7 @@
  */
 import { Component, computed, DestroyRef, effect, inject, input, OnInit, signal } from '@angular/core';
 import { PluginConfigClientService } from '../../core/services/plugin-config-client.service';
-import { IV2AutopilotOptionsResponse, IV2AutopilotProvider } from '../../core/interfaces/signalk-autopilot-interfaces';
+import { IV2AutopilotOptionsResponse, IV2AutopilotProvider, V2_AUTOPILOTS_PATH } from '../../core/interfaces/signalk-autopilot-interfaces';
 import { HttpClient } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom, Observable, finalize } from 'rxjs';
@@ -44,8 +44,8 @@ import { MatInputModule } from '@angular/material/input';
 const API_PATHS = {
   V1_PLUGIN: 'autopilot',
   V2_BASE: '/signalk/v2/api',
-  V2_AUTOPILOTS: '/signalk/v2/api/vessels/self/autopilots',
-  V2_DEFAULT_AUTOPILOT_ID: "/signalk/v2/api/vessels/self/autopilots/_providers/_default",
+  V2_AUTOPILOTS: V2_AUTOPILOTS_PATH,
+  V2_DEFAULT_AUTOPILOT_ID: `${V2_AUTOPILOTS_PATH}/_providers/_default`,
 } as const;
 
 const FAILSAFE_OPTIONS_RESPONSE: IV2AutopilotOptionsResponse = {

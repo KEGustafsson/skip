@@ -581,7 +581,7 @@
     "configFileVersion": 11,
     "configVersion": 19,
     "schemaVersion": 1,
-    "skipVersion": "1.4.1"
+    "skipVersion": "1.4.2"
   },
   "widgets": [
     {
@@ -695,6 +695,9 @@
       "selector": "widget-anchor-alarm"
     },
     {
+      "anyOfApis": [
+        "/signalk/v2/api/vessels/self/autopilots"
+      ],
       "anyOfPlugins": [
         "autopilot",
         "pypilot-autopilot-provider"

@@ -45,6 +45,7 @@ export class WidgetsListComponent implements OnInit {
       category,
       requiredPlugins,
       anyOfPlugins,
+      anyOfApis,
       selector,
       componentClassName
     } = selectedWidget;
@@ -59,8 +60,9 @@ export class WidgetsListComponent implements OnInit {
       defaultHeight,
       category,
       requiredPlugins,
-      // Only include anyOfPlugins if present
+      // Only include the optional dependency lists if present
       ...(anyOfPlugins ? { anyOfPlugins } : {}),
+      ...(anyOfApis ? { anyOfApis } : {}),
       selector,
       componentClassName
     };
