@@ -426,12 +426,25 @@ describe('DashboardComponent', () => {
         });
 
         it('adds the widget when a provider API answers, whatever the plugin list reports', async () => {
-            vi.spyOn(TestBed.inject(WidgetService), 'hasAnyApiProvider').mockResolvedValue(true);
+            const probe = vi.spyOn(TestBed.inject(WidgetService), 'hasAnyApiProvider').mockResolvedValue(true);
 
             await tryAdd(autopilotWidget);
 
+            expect(probe).toHaveBeenCalledWith(autopilotWidget.anyOfApis);
             expect(addWidgetToGrid()).toHaveBeenCalled();
             expect(TestBed.inject(ToastService).show).not.toHaveBeenCalled();
+        });
+
+        it('does not probe when an any-of plugin is already active', async () => {
+            vi.mocked(TestBed.inject(PluginConfigClientService).getPlugin)
+                .mockResolvedValue({ ok: true, data: { state: { enabled: true } } } as unknown as
+                    Awaited<ReturnType<PluginConfigClientService['getPlugin']>>);
+            const probe = vi.spyOn(TestBed.inject(WidgetService), 'hasAnyApiProvider');
+
+            await tryAdd(autopilotWidget);
+
+            expect(probe).not.toHaveBeenCalled();
+            expect(addWidgetToGrid()).toHaveBeenCalled();
         });
     });
 

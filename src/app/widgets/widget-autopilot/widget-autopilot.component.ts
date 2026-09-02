@@ -39,7 +39,8 @@ import {
   IV1CommandDefinition,
   V1CommandsMap,
   IV2ApiEndpoints,
-  TApMode
+  TApMode,
+  V2_AUTOPILOTS_PATH,
 } from '../../core/interfaces/signalk-autopilot-interfaces';
 import { ITheme } from '../../core/services/app-service';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
@@ -58,7 +59,7 @@ interface MenuItem {
 const API_PATHS = {
   V1_MODE_PATH: 'self.steering.autopilot.state',
   V2_BASE: '/signalk/v2/api',
-  V2_AUTOPILOTS: '/signalk/v2/api/vessels/self/autopilots',
+  V2_AUTOPILOTS: V2_AUTOPILOTS_PATH,
   V2_COURSE: '/signalk/v2/api/vessels/self/navigation/course'
 } as const;
 

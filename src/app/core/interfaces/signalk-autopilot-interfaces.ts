@@ -38,6 +38,12 @@ export interface IV2CommandDefinition {
 }
 
 /**
+ * Autopilot API v2 provider registry. Every autopilot surface in the app reads this one path, so
+ * a Signal K change to it lands in a single place.
+ */
+export const V2_AUTOPILOTS_PATH = '/signalk/v2/api/vessels/self/autopilots';
+
+/**
  * Response structure for V2 API autopilot discovery endpoint
  * GET /signalk/v2/api/vessels/self/autopilots
  */

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WidgetService } from './widget.service';
 import { PluginConfigClientService } from './plugin-config-client.service';
 
@@ -26,6 +26,10 @@ describe('WidgetService', () => {
     });
     service = TestBed.inject(WidgetService);
     httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
   });
 
   it('should be created', () => {
@@ -125,6 +129,20 @@ describe('WidgetService', () => {
     it('is false without endpoints to probe', async () => {
       await expect(service.hasAnyApiProvider(undefined)).resolves.toBe(false);
       await expect(service.hasAnyApiProvider([])).resolves.toBe(false);
+    });
+
+    it('reads a probe that never answers as no provider', async () => {
+      vi.useFakeTimers();
+      try {
+        const pending = service.hasAnyApiProvider(['/hangs']);
+        const request = await vi.waitFor(() => httpMock.expectOne('/hangs'));
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(pending).resolves.toBe(false);
+        expect(request.cancelled).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('is true when any endpoint returns a non-empty collection', async () => {
