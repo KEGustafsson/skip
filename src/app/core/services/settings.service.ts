@@ -41,10 +41,12 @@ export class SettingsService {
   private readonly _browserTabTitle = signal<string>('Skip');
   private readonly _keepScreenAwake = signal<boolean>(true);
   private readonly _autoRevealToolbar = signal<boolean>(true);
+  private readonly _pinToolbar = signal<boolean>(false);
 
   public readonly themeName = this._themeName.asReadonly();
   public readonly keepScreenAwake = this._keepScreenAwake.asReadonly();
   public readonly autoRevealToolbar = this._autoRevealToolbar.asReadonly();
+  public readonly pinToolbar = this._pinToolbar.asReadonly();
   public readonly notificationConfig = this._notificationConfig.asReadonly();
   public readonly autoNightMode = this._autoNightMode.asReadonly();
   public readonly redNightMode = this._redNightMode.asReadonly();
@@ -265,6 +267,7 @@ export class SettingsService {
     this._nightModeBrightness.set(app.nightModeBrightness === undefined ? 0.2 : app.nightModeBrightness);
     this._keepScreenAwake.set(app.keepScreenAwake === undefined ? true : app.keepScreenAwake);
     this._autoRevealToolbar.set(app.autoRevealToolbar === undefined ? true : app.autoRevealToolbar);
+    this._pinToolbar.set(app.pinToolbar === undefined ? false : app.pinToolbar);
 
     // Embed is strictly read-only: the in-memory defaults above are applied, but the persist-on-missing
     // self-heal write is suppressed so a framed read-only boot never PATCHes the profile's app config.
@@ -391,6 +394,15 @@ export class SettingsService {
 
   public getAutoRevealToolbar(): boolean {
     return this.autoRevealToolbar();
+  }
+
+  public setPinToolbar(pinned: boolean) {
+    this._pinToolbar.set(pinned);
+    this.saveAppConfig();
+  }
+
+  public getPinToolbar(): boolean {
+    return this.pinToolbar();
   }
 
   // Red night mode
@@ -553,7 +565,8 @@ export class SettingsService {
       notificationConfig: this.notificationConfig(),
       browserTabTitle: this.browserTabTitle(),
       keepScreenAwake: this.keepScreenAwake(),
-      autoRevealToolbar: this.autoRevealToolbar()
+      autoRevealToolbar: this.autoRevealToolbar(),
+      pinToolbar: this.pinToolbar()
     }
     return storageObject;
   }

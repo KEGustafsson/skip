@@ -7,7 +7,8 @@
   position: relative;
 }
 
-// The toolbar overlays (position: fixed); the routed content fills the shell.
+// The toolbar overlays (position: fixed) unless it is pinned, in which case it claims a row of its
+// own here and the routed content gets what is left.
 .skip-app-shell > *:not(app-toolbar) {
   flex: 1 1 auto;
   min-height: 0;

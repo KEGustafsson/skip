@@ -53,6 +53,7 @@ class SettingsServiceMock {
     public getBrowserTabTitle() { return 'Skip'; }
     public getKeepScreenAwake() { return true; }
     public getAutoRevealToolbar() { return true; }
+    public getPinToolbar() { return false; }
     public setAutoNightMode(): void { }
     public setRedNightMode(): void { }
     public setNightModeBrightness(): void { }
@@ -62,6 +63,7 @@ class SettingsServiceMock {
     public setBrowserTabTitle(): void { }
     public setKeepScreenAwake(): void { }
     public setAutoRevealToolbar(): void { }
+    public setPinToolbar(): void { }
 }
 
 class PluginConfigClientServiceMock {
@@ -139,6 +141,46 @@ describe('SettingsNotificationsComponent', () => {
         const fx = TestBed.createComponent(SettingsDisplayComponent);
         fx.detectChanges();
         expect(fx.componentInstance['autoRevealToolbar']()).toBe(false);
+    });
+
+    it('loads a stored pinned-toolbar preference into the toggle (#606)', () => {
+        const settings = TestBed.inject(SettingsService) as unknown as SettingsServiceMock;
+        vi.spyOn(settings, 'getPinToolbar').mockReturnValue(true);
+        const fx = TestBed.createComponent(SettingsDisplayComponent);
+        fx.detectChanges();
+        expect(fx.componentInstance['pinToolbar']()).toBe(true);
+    });
+
+    // The disabled binding is the only thing stopping the UI from offering two settings that
+    // contradict each other, since pinning overrides automatic reveal.
+    it('disables the automatic-reveal toggle while the toolbar is pinned (#606)', () => {
+        const fx = TestBed.createComponent(SettingsDisplayComponent);
+        fx.detectChanges();
+        const autoRevealButton = (): HTMLButtonElement => {
+            const host = Array.from(fx.nativeElement.querySelectorAll('mat-slide-toggle'))
+                .find((t) => (t as HTMLElement).textContent?.includes('Show the toolbar automatically'));
+            expect(host).toBeDefined();
+            return (host as HTMLElement).querySelector('button') as HTMLButtonElement;
+        };
+
+        expect(autoRevealButton().disabled).toBe(false);
+
+        fx.componentInstance['pinToolbar'].set(true);
+        fx.detectChanges();
+
+        expect(autoRevealButton().disabled).toBe(true);
+    });
+
+    it('saves the pinned-toolbar preference (#606)', async () => {
+        const settings = TestBed.inject(SettingsService) as unknown as SettingsServiceMock;
+        const setPinToolbar = vi.spyOn(settings, 'setPinToolbar');
+
+        component['pinToolbar'].set(true);
+        component['saveAllSettings']();
+        await flushPromises();
+        await flushPromises();
+
+        expect(setPinToolbar).toHaveBeenCalledWith(true);
     });
 
     it('saves the automatic-toolbar-reveal preference (#495)', async () => {

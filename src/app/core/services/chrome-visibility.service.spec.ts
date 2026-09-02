@@ -127,4 +127,66 @@ describe('ChromeVisibilityService', () => {
     service.hide();
     expect(service.revealed()).toBe(false);
   });
+
+  describe('pinned', () => {
+    it('holds the toolbar open through the idle hide and an explicit hide', () => {
+      service.setPinned(true);
+
+      expect(service.revealed()).toBe(true);
+      vi.advanceTimersByTime(CHROME_BOOT_DWELL_MS + CHROME_IDLE_HIDE_MS);
+      expect(service.revealed()).toBe(true);
+
+      service.hide();
+      expect(service.revealed()).toBe(true);
+    });
+
+    it('reveals a toolbar that had already hidden', () => {
+      vi.advanceTimersByTime(CHROME_BOOT_DWELL_MS);
+      expect(service.revealed()).toBe(false);
+
+      service.setPinned(true);
+      expect(service.revealed()).toBe(true);
+    });
+
+    it('outranks a disabled auto-reveal', () => {
+      service.setAutoReveal(false);
+      service.setPinned(true);
+
+      expect(service.revealed()).toBe(true);
+      service.revealAuto();
+      vi.advanceTimersByTime(CHROME_IDLE_HIDE_MS);
+      expect(service.revealed()).toBe(true);
+    });
+
+    // AppComponent pushes both settings from one effect on every run, so setPinned(false) lands on
+    // an already-unpinned service routinely — including right after setAutoReveal(false) retracted
+    // the boot dwell. Revealing there would undo #495 on every config hydration and settings save.
+    it('does nothing when the value has not changed', () => {
+      service.setAutoReveal(false);
+      expect(service.revealed()).toBe(false);
+
+      service.setPinned(false);
+
+      expect(service.revealed()).toBe(false);
+    });
+
+    it('respects a disabled auto-reveal when unpinned', () => {
+      service.setAutoReveal(false);
+      service.setPinned(true);
+      expect(service.revealed()).toBe(true);
+
+      service.setPinned(false);
+
+      expect(service.revealed()).toBe(false);
+    });
+
+    it('hands the toolbar back to the idle timer when unpinned', () => {
+      service.setPinned(true);
+      service.setPinned(false);
+
+      expect(service.revealed()).toBe(true);
+      vi.advanceTimersByTime(CHROME_IDLE_HIDE_MS);
+      expect(service.revealed()).toBe(false);
+    });
+  });
 });

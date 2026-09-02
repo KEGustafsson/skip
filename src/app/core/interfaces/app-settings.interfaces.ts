@@ -34,6 +34,7 @@ export interface IAppConfig {
   browserTabTitle?: string;
   keepScreenAwake?: boolean;
   autoRevealToolbar?: boolean;
+  pinToolbar?: boolean;
 }
 
 export interface IThemeConfig {

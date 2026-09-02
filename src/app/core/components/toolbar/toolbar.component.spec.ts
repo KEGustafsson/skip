@@ -18,6 +18,7 @@ import { ensureTestIconsReady } from '../../../../test-helpers/icon-test-utils';
 const chrome = {
   revealed: signal(false),
   peeking: signal(false),
+  pinned: signal(false),
   reveal: vi.fn(),
   suppressHide: vi.fn(),
   allowHide: vi.fn(),
@@ -62,6 +63,7 @@ describe('ToolbarComponent', () => {
     dashboard.isReadOnlySession.set(false);
     chrome.revealed.set(false);
     chrome.peeking.set(false);
+    chrome.pinned.set(false);
     dashboard.isDashboardStatic.set(true);
     uiEvent.fullscreenSupported.set(true);
     uiEvent.fullscreenStatus.set(false);
@@ -254,6 +256,63 @@ describe('ToolbarComponent', () => {
     chrome.revealed.set(true);
     init();
     expect(el.querySelector('.toolbar-host')!.classList.contains('revealed')).toBe(true);
+  });
+
+  describe('pinned (#606)', () => {
+    // The class is what moves the component host out of overlay mode into a row of the shell's flex
+    // column; without it the pinned toolbar would cover the top of the page instead of shortening it.
+    it('marks the component host as pinned so it claims a layout row', () => {
+      chrome.pinned.set(true);
+      init();
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(true);
+    });
+
+    it('leaves the host unpinned by default', () => {
+      init();
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(false);
+    });
+
+    // The setting is changed in Display settings while the toolbar is on screen, so the class has
+    // to track the signal, not just its value at construction.
+    it('follows a runtime change of the setting', () => {
+      init();
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(false);
+
+      chrome.pinned.set(true);
+      fixture.detectChanges();
+
+      expect((fixture.nativeElement as HTMLElement).classList.contains('pinned')).toBe(true);
+    });
+
+    // Runs the dwell to completion with the toolbar hidden, the one arrangement in which the hover
+    // path would otherwise reveal — so the assertion fails if the pinned guard is removed.
+    it('ignores a peek-band hover, since there is nothing to reveal', () => {
+      vi.useFakeTimers();
+      try {
+        chrome.pinned.set(true);
+        init();
+
+        (fixture.componentInstance as unknown as { onDocumentPointerMove: (e: PointerEvent) => void })
+          .onDocumentPointerMove({ clientY: 4, pointerType: 'mouse' } as PointerEvent);
+        vi.advanceTimersByTime(CHROME_HOVER_DWELL_MS);
+
+        expect(chrome.reveal).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    // The bar is made visible by CSS keyed on the host class; `inert` is keyed on `revealed`. If a
+    // pinned toolbar were ever rendered with revealed false, it would look normal and ignore clicks.
+    it('is not inert while pinned', () => {
+      chrome.pinned.set(true);
+      chrome.revealed.set(true);
+      init();
+
+      expect(el.querySelector('.toolbar')!.hasAttribute('inert')).toBe(false);
+    });
   });
 
   describe('hover-reveal (peek-band dwell)', () => {

@@ -69,7 +69,7 @@ Every control reaches the same command from touch, mouse, and keyboard. Nothing 
 
 ### The auto-hiding toolbar
 
-Skip has no permanent chrome. The toolbar appears when the app loads, hides after a few seconds, and comes back on demand:
+Skip has no permanent chrome by default. The toolbar appears when the app loads, hides after a few seconds, and comes back on demand:
 
 - **Touch:** swipe down from the top edge. Swipe up to send it away.
 - **Mouse or trackpad:** scroll up, click the peek strip at the top edge, or rest the pointer there. Scroll down to hide it.
