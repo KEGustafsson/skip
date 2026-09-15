@@ -150,6 +150,7 @@ export class WidgetService {
     WidgetLabelComponent: () => import('../../widgets/widget-label/widget-label.component').then(m => m.WidgetLabelComponent),
     WidgetIframeComponent: () => import('../../widgets/widget-iframe/widget-iframe.component').then(m => m.WidgetIframeComponent),
     WidgetHorizonComponent: () => import('../../widgets/widget-horizon/widget-horizon.component').then(m => m.WidgetHorizonComponent),
+    WidgetSeaHorizonComponent: () => import('../../widgets/widget-sea-horizon/widget-sea-horizon.component').then(m => m.WidgetSeaHorizonComponent),
     WidgetHeelGaugeComponent: () => import('../../widgets/widget-heel-gauge/widget-heel-gauge.component').then(m => m.WidgetHeelGaugeComponent),
     WidgetSteelGaugeComponent: () => import('../../widgets/widget-gauge-steel/widget-gauge-steel.component').then(m => m.WidgetSteelGaugeComponent),
     WidgetSteelCompassComponent: () => import('../../widgets/widget-gauge-steel-compass/widget-gauge-steel-compass.component').then(m => m.WidgetSteelCompassComponent),
@@ -368,6 +369,19 @@ export class WidgetService {
       requiredPlugins: [],
       selector: 'widget-horizon',
       componentClassName: 'WidgetHorizonComponent'
+    },
+    {
+      name: 'Sea Horizon',
+      description: 'Marine attitude indicator in a classic steel case. Sea instead of earth, a pitch ladder ruled for a hull rather than an aircraft, and a heel scale to 45° with nominal, caution and alarm bands plus a configurable red limit index. Shows heel and trim on an LCD, with optional damping for a noisy sensor in a seaway.',
+      icon: 'seaHorizonGauge',
+      minWidth: 1,
+      minHeight: 2,
+      defaultWidth: 4,
+      defaultHeight: 6,
+      category: 'Gauge',
+      requiredPlugins: [],
+      selector: 'widget-sea-horizon',
+      componentClassName: 'WidgetSeaHorizonComponent'
     },
     {
       name: 'Classic Steel',
