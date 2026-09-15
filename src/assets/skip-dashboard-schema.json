@@ -1454,7 +1454,6 @@
         "gauge": {
           "degreeScale": true,
           "finish": "anthracite",
-          "rotateFace": true,
           "type": "steelCompass"
         },
         "paths": {

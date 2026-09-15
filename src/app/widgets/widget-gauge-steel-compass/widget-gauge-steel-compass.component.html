@@ -61,14 +61,6 @@
     <circle cx="250" cy="250" r="12" fill="none" [attr.stroke]="finish().tickMinor" stroke-width="2" />
   </g>
 
-  <!-- Fixed-card mode only: the card is parked north-up and this pointer swings to the heading. -->
-  @if (!cardTurns()) {
-    <g class="pointer" [attr.transform]="'rotate(' + pointerRotation() + ' 250 250)'">
-      <path d="M 250 86 L 257 250 L 250 306 L 243 250 Z" [attr.fill]="finish().index" />
-      <circle cx="250" cy="250" r="16" [attr.fill]="'url(#' + gradientId() + '-screw)'" stroke="rgba(0,0,0,.4)" stroke-width="2" />
-    </g>
-  }
-
   <!-- Widget name, clear of the card's own printing. -->
   @if (displayName()) {
     <text

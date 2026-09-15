@@ -246,7 +246,6 @@ describe('ModalWidgetComponent steel compass gauge controls', () => {
     const gauge = component.formMaster.get('gauge') as UntypedFormGroup;
     expect(gauge).toBeTruthy();
     // Every key the compass Settings tab binds by name.
-    expect(gauge.get('rotateFace')?.value).toBe(true);
     expect(gauge.get('degreeScale')?.value).toBe(true);
     expect(gauge.get('finish')?.value).toBe('anthracite');
   });

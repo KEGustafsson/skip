@@ -97,6 +97,7 @@ export function shortestTurn(from: number, to: number): number {
 
 /**
  * Steel compass: the card turns under a fixed index at the rim, the way a binnacle compass reads.
+ * That is the only mode — there is no needle on this dial in any configuration.
  *
  * Drawn here rather than by the bundled steelseries library. That library's `Compass` can rotate its
  * card, but its index is always a full needle from the hub outwards — and a needle on a compass
@@ -139,7 +140,6 @@ export class WidgetSteelCompassComponent {
     },
     gauge: {
       type: 'steelCompass',
-      rotateFace: true,
       degreeScale: true,
       finish: 'anthracite'
     },
@@ -187,14 +187,8 @@ export class WidgetSteelCompassComponent {
     return COMPASS_FINISHES[key] ?? COMPASS_FINISHES['anthracite'];
   });
 
-  /** True for the binnacle card that turns under the index; false parks the card and swings a pointer. */
-  protected readonly cardTurns = computed(() => this.runtime.options()?.gauge?.rotateFace !== false);
-
   /** Card rotation. Negative because the card turns against the heading to bring it under the index. */
-  protected readonly cardRotation = computed(() => (this.cardTurns() ? -this.turned() : 0));
-
-  /** Pointer rotation for the fixed-card mode; parked at north while there is no reading. */
-  protected readonly pointerRotation = computed(() => (this.cardTurns() ? 0 : this.turned()));
+  protected readonly cardRotation = computed(() => -this.turned());
 
   /** Unique per instance: two compasses on one dashboard must not share gradient ids. */
   protected readonly gradientId = computed(() => `sc-${this.id()}`);

@@ -20,10 +20,6 @@
   transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.pointer {
-  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
 text {
   font-family: Roboto, "Helvetica Neue", sans-serif;
 }
@@ -54,14 +50,12 @@ text {
 // No reading yet, or the path was re-pointed at one that reports nothing: the card sits on 000,
 // which is a heading of north to anyone glancing at it. Dimming says the number under the index is
 // not a measurement, and the LCD reads `---` beside it.
-.compass.stale .card,
-.compass.stale .pointer {
+.compass.stale .card {
   opacity: 0.4;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card,
-  .pointer {
+  .card {
     transition: none;
   }
 }

@@ -24,8 +24,6 @@ describe('WidgetSteelCompassComponent', () => {
     unitLabel: () => string;
     displayName: () => string;
     cardRotation: () => number;
-    pointerRotation: () => number;
-    cardTurns: () => boolean;
     cardLabels: () => { text: string; fill: string }[];
     finish: () => { index: string };
   }
@@ -132,7 +130,6 @@ describe('WidgetSteelCompassComponent', () => {
     capturedNext?.(update(87));
     // The card carries 087 to the top by rotating 87 degrees anticlockwise.
     expect(internals.cardRotation()).toBe(-87);
-    expect(internals.cardTurns()).toBe(true);
   });
 
   it('crosses north the short way instead of unwinding through south', () => {
@@ -145,14 +142,15 @@ describe('WidgetSteelCompassComponent', () => {
     expect(internals.cardRotation() - before).toBe(-20);
   });
 
-  it('parks the card and swings the pointer when the card is configured fixed', () => {
-    options.set({ ...makeConfig(), gauge: { ...WidgetSteelCompassComponent.DEFAULT_CONFIG.gauge, type: 'steelCompass', rotateFace: false } });
+  it('has no needle to render, whatever a stored config asks for', () => {
+    // A compass needle points north; this dial's index is a fixed mark at the rim and the card is
+    // what moves. An old config carrying the withdrawn fixed-card flag cannot bring one back.
+    options.set({ ...makeConfig(), gauge: { type: 'steelCompass', rotateFace: false } });
     fixture.detectChanges();
     capturedNext?.(update(87));
 
-    expect(internals.cardTurns()).toBe(false);
-    expect(internals.cardRotation()).toBe(0);
-    expect(internals.pointerRotation()).toBe(87);
+    expect(internals.cardRotation()).toBe(-87);
+    expect(fixture.nativeElement.querySelector('.pointer')).toBeNull();
   });
 
   it('prints north in the index colour so the card reads at a glance', () => {
@@ -179,10 +177,9 @@ describe('WidgetSteelCompassComponent', () => {
     expect(internals.finish()).toBe(COMPASS_FINISHES['anthracite']);
   });
 
-  it('defaults to a rotating card fed degrees off a radian path', () => {
+  it('is fed degrees off a radian path', () => {
     const cfg = WidgetSteelCompassComponent.DEFAULT_CONFIG;
     const gaugePath = (cfg.paths as IPathArray)['gaugePath'];
-    expect(cfg.gauge?.rotateFace).toBe(true);
     expect(cfg.gauge?.finish).toBe('anthracite');
     expect(gaugePath.pathSkUnitsFilter).toBe('rad');
     expect(gaugePath.convertUnitTo).toBe('deg');
