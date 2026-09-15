@@ -15,6 +15,7 @@ import type { IWidgetSvcConfig } from '../../core/interfaces/widgets-interface';
 interface SeaHorizonInternals {
   frameVisible: () => boolean;
   dialTransform: () => string | null;
+  overlayTransform: () => string | null;
   cautionAngle: () => number;
   alarmAngle: () => number;
   heelBands: () => { d: string; fill: string }[];
@@ -35,6 +36,10 @@ const ATTITUDE_PATHS = {
   gaugePitchPath: { path: 'self.navigation.attitude', pathType: 'number', convertUnitTo: 'deg', source: 'default' },
   gaugeRollPath: { path: 'self.navigation.attitude', pathType: 'number', convertUnitTo: 'deg', source: 'default' }
 };
+
+/** Radii the component lays out against: its dial design radius and the steelseries face shading. */
+const DIAL_DESIGN_R = 112;
+const FACE_SHADOW_R = 124.766;
 
 type GaugeOverrides = Partial<NonNullable<IWidgetSvcConfig['gauge']>>;
 
@@ -342,6 +347,25 @@ describe('WidgetSeaHorizonComponent dial geometry', () => {
     const h = mount(baseConfig({ noFrameVisible: false }));
     expect(h.component.frameVisible()).toBe(false);
     expect(h.component.dialTransform()).toContain('scale(1.3393)');
+  });
+
+  /** The radius a circle authored at `authoredR` actually paints at under a transform. */
+  function paintedRadius(transform: string | null, authoredR: number): number {
+    const m = transform?.match(/scale\(([\d.]+)\)/);
+    return authoredR * (m ? parseFloat(m[1]) : 1);
+  }
+
+  // The face shading and the glass dome are authored at the steelseries face radius while the dial
+  // is authored at its own, so the two only line up if both are scaled to the same extent. Before
+  // this was handled, turning the case off grew the dial to the tile but left the vignette and glass
+  // stopping 25px short of its edge.
+  it('paints the face shading and glass out to the dial edge, case on or off', () => {
+    for (const noFrameVisible of [true, false]) {
+      TestBed.resetTestingModule();
+      const c = mount(baseConfig({ noFrameVisible })).component;
+      expect(paintedRadius(c.overlayTransform(), FACE_SHADOW_R))
+        .toBeCloseTo(paintedRadius(c.dialTransform(), DIAL_DESIGN_R), 0);
+    }
   });
 
   it('rotates the world against the boat, not the boat against the world', () => {

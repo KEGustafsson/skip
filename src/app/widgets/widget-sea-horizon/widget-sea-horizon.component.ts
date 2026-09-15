@@ -480,6 +480,18 @@ export class WidgetSeaHorizonComponent {
     return `translate(${CX} ${CY}) scale(${scale.toFixed(4)}) translate(${-CX} ${-CY})`;
   });
 
+  /**
+   * Face shading and glass are authored at the steelseries face radius, so with the case on they
+   * already sit on the dial's edge and need no transform. With it off the dial grows to fill the
+   * tile, and they have to grow with it — otherwise the vignette and the glass dome stop short of
+   * the edge and the dial reads as a small gauge floating in a dark ring.
+   */
+  protected readonly overlayTransform = computed(() => {
+    if (this.frameVisible()) return null;
+    const scale = FRAME_R / FACE_R;
+    return `translate(${CX} ${CY}) scale(${scale.toFixed(4)}) translate(${-CX} ${-CY})`;
+  });
+
   protected readonly cautionAngle = computed(() => {
     const raw = this.runtime.options()?.gauge?.heelCautionAngle;
     return clamp(typeof raw === 'number' && isFinite(raw) ? raw : DEFAULT_CAUTION_ANGLE, 1, HEEL_SCALE_MAX - 1);

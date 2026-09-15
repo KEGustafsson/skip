@@ -221,10 +221,11 @@
     </g>
   </g>
 
-  <!-- Face shading and glass sit above the dial, in case space, exactly as the steel gauges layer them -->
-  <g class="face-shading" pointer-events="none">
+  <!-- Face shading and glass sit above the dial, exactly as the steel gauges layer them. They follow
+       the dial's extent, which is the face with the case on and the whole tile with it off. -->
+  <g [attr.transform]="overlayTransform()" pointer-events="none">
     <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="url().shadow" />
     <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="url().vignette" />
+    <path class="glass" [attr.d]="glassPath" [attr.fill]="url().glass" />
   </g>
-  <path class="glass" [attr.d]="glassPath" [attr.fill]="url().glass" pointer-events="none" />
 </svg>
