@@ -1,0 +1,158 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.steel-compass {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  container-type: size;
+}
+
+.dial {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+// The gauge canvas is a square of side min(width, height) inside the 10px pad the shared steel
+// wrapper applies, so the overlay is the same square — every offset below can then be a fraction of
+// the card rather than of the tile, and the readout holds its place on the face at any aspect ratio.
+.face {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(min(100cqw, 100cqh) - 20px);
+  aspect-ratio: 1;
+  container-type: size;
+  // The dial belongs to the dashboard's gesture surface: drag, long-press and the widget menu all
+  // have to pass straight through the overlay.
+  pointer-events: none;
+}
+
+.face-title {
+  position: absolute;
+  top: 30%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  font-weight: 500;
+  font-size: 7cqmin;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.66);
+  text-shadow: 0 0.4cqmin 0.6cqmin rgba(0, 0, 0, 0.6);
+  // A long widget name is clipped rather than allowed to run over the card's numerals.
+  padding: 0 22%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+// Steelseries' own LCD tone: a grey-green plate with dark ink, lit from the top.
+.lcd {
+  position: absolute;
+  left: 50%;
+  // Below the hub, not across it: the pointer's tail and the knob own the middle of the card.
+  top: 57%;
+  transform: translateX(-50%);
+  width: 42cqmin;
+  height: 14cqmin;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2cqmin;
+  padding: 0 2.4cqmin;
+  border: 0.5cqmin solid rgba(0, 0, 0, 0.45);
+  border-radius: 1.2cqmin;
+  background: linear-gradient(180deg, #cbd0b4 0%, #adb598 100%);
+  box-shadow: inset 0 0.6cqmin 1cqmin rgba(0, 0, 0, 0.22);
+}
+
+.lcd-unit,
+.lcd-value {
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  line-height: 1;
+  color: #20261f;
+  font-variant-numeric: tabular-nums;
+}
+
+.lcd-unit {
+  font-size: 5cqmin;
+  font-weight: 500;
+  opacity: 0.72;
+}
+
+.lcd-value {
+  font-size: 9.5cqmin;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+// A 1x1 tile leaves the name too small to read and the readout is what the dial is for, so the
+// name gives up its space and the LCD takes it.
+@container (max-width: 170px) {
+  .face-title {
+    display: none;
+  }
+
+  .lcd {
+    top: 54%;
+    width: 54cqmin;
+    height: 18cqmin;
+  }
+
+  .lcd-value {
+    font-size: 12cqmin;
+  }
+
+  .lcd-unit {
+    font-size: 6cqmin;
+  }
+}
+
+// Container queries reached Chrome 105 / Safari 16. Skip also runs inside third-party chartplotter
+// browsers through the Freeboard-SK panel, so an engine without them gets a fixed square that still
+// lands the readout on the face, sized for a typical 2x2 tile — and the LCD sized to match it, kept
+// in the same block so the two cannot drift apart.
+@supports not (container-type: size) {
+  .face {
+    width: 240px;
+    // Stated outright rather than left to aspect-ratio: an engine this old may not have that
+    // either, and a zero-height box would stack the readout on the rim.
+    height: 240px;
+    font-size: 16px;
+  }
+
+  .face-title { font-size: 1em; }
+
+  .lcd {
+    width: 100px;
+    height: 34px;
+    border-width: 1px;
+    border-radius: 3px;
+    padding: 0 6px;
+  }
+
+  .lcd-unit { font-size: 0.75em; }
+  .lcd-value { font-size: 1.5em; }
+}
+
+// No reading yet, or the path was re-pointed at one that reports nothing: the card sits on 000,
+// which is a heading of north to anyone glancing at it. Dimming the dial says the number under the
+// pointer is not a measurement, and the LCD reads `---` beside it.
+.stale .dial {
+  opacity: 0.4;
+}
+
+.stale .face-title,
+.stale .lcd {
+  opacity: 0.55;
+}
