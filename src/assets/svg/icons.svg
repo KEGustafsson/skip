@@ -223,6 +223,20 @@
       </mask>
       <rect width="24" height="24" fill="currentColor" mask="url(#lineMdCompassTwotone0)" />
     </svg>
+    <svg id="steelCompassGauge" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5">
+        <path fill="var(--mat-sys-primary)" fill-opacity="0.4" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z" />
+        <circle cx="12" cy="12" r="5.6" />
+      </g>
+      <g fill="currentColor">
+        <path d="M10.6 3.3H13.4L12 6.3Z" />
+        <g transform="rotate(28 12 12)">
+          <path d="M12 7.6 13.4 11.9 12 11 10.6 11.9Z" />
+          <circle cx="12" cy="16.6" r="0.9" />
+        </g>
+        <circle cx="12" cy="12" r="1.5" />
+      </g>
+    </svg>
     <svg id="steelGauge" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
       <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5">
         <path fill="var(--mat-sys-primary)" fill-opacity="0.4" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z" />
