@@ -63,6 +63,7 @@
       <pattern
         [attr.id]="tex.id" patternUnits="userSpaceOnUse"
         x="0" y="0" [attr.width]="tex.size" [attr.height]="tex.size"
+        [attr.patternTransform]="texturePatternTransform()"
       >
         @for (shape of tex.shapes; track $index) {
           <path [attr.d]="shape.d" [attr.fill]="shape.fill" />
@@ -155,7 +156,7 @@
       <path [attr.d]="w.d" [attr.fill]="'url(#' + w.id + ')'" />
     }
     @if (turnedScribes().length) {
-      <g [attr.clip-path]="url().face" fill="none" stroke-width="0.5">
+      <g [attr.clip-path]="url().face" fill="none" [attr.stroke-width]="scribeStrokeWidth()">
         @for (scribe of turnedScribes(); track $index) {
           <circle [attr.cx]="scribe.cx" [attr.cy]="scribe.cy" [attr.r]="scribe.r" [attr.stroke]="scribe.stroke" />
         }

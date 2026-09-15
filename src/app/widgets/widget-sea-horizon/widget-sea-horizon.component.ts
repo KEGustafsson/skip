@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { IWidgetSvcConfig } from '../../core/interfaces/widgets-interface';
 import type { IPathUpdate } from '../../core/services/data.service';
 import { ITheme } from '../../core/services/app-service';
@@ -18,16 +18,22 @@ import { WidgetStreamsDirective, widgetPathSignature } from '../../core/directiv
  * stub rather than an aircraft.
  *
  * It wears the same Classic Steel case as Skip's other steel gauges, but draws it as SVG: bezel,
- * bevel, face vignette, glass crescent, engraved scale and LCD insets are gradients and paths. That
- * is why this widget has none of widget-horizon's resize plumbing — no ResizeObserver, no
- * size-stabilisation timer, no gauge rebuild on resize. Those exist only because steelseries draws
- * into a fixed-pixel canvas; a fixed viewBox scales for free and stays crisp on a retina MFD.
+ * bevel, face vignette, glass crescent, engraved scale and LCD insets are gradients and paths. A
+ * fixed viewBox scales for free and stays crisp on a retina MFD, so there is none of
+ * widget-horizon's resize plumbing — no size-stabilisation timer, no gauge rebuild on resize.
+ *
+ * It does observe its own size, for one reason: steelseries specifies its two texture tiles in
+ * device pixels rather than as a fraction of the dial, so matching one means knowing how big this
+ * dial was painted. That feeds a single number into a pattern transform — no geometry is rebuilt
+ * and nothing re-renders beyond the `carbon` and `punchedSheet` faces changing tile scale.
  */
 
 // ---------------------------------------------------------------------------
 // Fixed geometry. The viewBox never changes, so every static coordinate below is
 // computed once at module load rather than per instance or per frame.
 // ---------------------------------------------------------------------------
+/** The viewBox is square and never changes; every coordinate below is in its units. */
+const VIEWBOX = 300;
 const CX = 150;
 const CY = 150;
 
@@ -182,7 +188,7 @@ interface IFrameDesign {
 }
 
 /** One wedge of an approximated conical sweep: an annulus segment and the colours of its two edges. */
-interface IFrameWedge { d: string; x1: number; y1: number; x2: number; y2: number; c0: string; c1: string; }
+interface IFrameWedge { a0: number; d: string; x1: number; y1: number; x2: number; y2: number; c0: string; c1: string; }
 
 /**
  * Bezel finishes, taken from steelseries' drawFrame.js and resolved against this viewBox, keyed by
@@ -333,10 +339,11 @@ function snappedBoundaries(fractions: number[], steps: number): number[] {
 }
 
 /**
- * 24 wedges is indistinguishable from the real ring and costs a fraction of the elements a
- * per-degree fan would. Only a brushed bezel or a stainless/turned face emits these at all.
+ * Subdivision the bezel ring's sweep is drawn at. Snapped to the colour stops like the face's:
+ * measured against the real bezel, a plain 24-way split leaves chrome — 17 stops, several of them
+ * narrow — averaging 3.8 RGB counts out with excursions of 29 where a wedge straddles a stop.
  */
-const FRAME_WEDGE_BOUNDARIES = uniformBoundaries(24);
+const FRAME_WEDGE_STEPS = 24;
 
 /** How far past its trailing edge each wedge is painted — see conicalWedges(). */
 const WEDGE_OVERLAP_DEG = 0.4;
@@ -361,6 +368,7 @@ function conicalWedges(
     const [x1, y1] = polar(gradR, d0);
     const [x2, y2] = polar(gradR, d1);
     wedges.push({
+      a0: d0,
       // Painted a shade past its trailing edge so neighbours butt rather than meet: two antialiased
       // edges over the same seam composite to a hairline, which on a large face reads as spokes.
       // The gradient still runs between the true edges, so no colour moves.
@@ -583,6 +591,14 @@ export class WidgetSeaHorizonComponent {
   protected readonly runtime = inject(WidgetRuntimeDirective);
   private readonly streams = inject(WidgetStreamsDirective);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  /**
+   * Edge length the instrument is actually painted at, in CSS pixels. Only the texture tiles need
+   * it. Defaults to the viewBox, so a widget that never gets a measurement — jsdom, a detached tile,
+   * a browser without ResizeObserver — still draws them at their authored size.
+   */
+  private readonly paintedPx = signal(VIEWBOX);
 
   public static readonly DEFAULT_CONFIG: IWidgetSvcConfig = {
     supportAutomaticHistoricalSeries: false,
@@ -777,7 +793,9 @@ export class WidgetSeaHorizonComponent {
     const conical = this.frameDesign().conical;
     if (!conical) return [];
     const suffix = this.id();
-    return conicalWedges(conical.fractions, conical.colors, CONIC_INNER_R, CONIC_OUTER_R, FRAME_WEDGE_BOUNDARIES)
+    return conicalWedges(
+      conical.fractions, conical.colors, CONIC_INNER_R, CONIC_OUTER_R,
+      snappedBoundaries(conical.fractions, FRAME_WEDGE_STEPS))
       .map((w, i) => ({ ...w, id: `skh-wg${i}-${suffix}` }));
   });
 
@@ -809,6 +827,30 @@ export class WidgetSeaHorizonComponent {
         fill: shape.grad === undefined ? (shape.fill ?? 'none') : `url(#${gradients[shape.grad].id})`
       }))
     };
+  });
+
+  /**
+   * Keeps a texture tile the size steelseries draws it, 12 or 15 device pixels, whatever the widget
+   * is painted at. Without it the tile is a fixed fraction of the dial instead, which is right only
+   * where the dial happens to be 300px wide and grows with the widget everywhere else: at 380px the
+   * weave comes out 27% coarser than a Classic Steel gauge beside it on the same dashboard.
+   */
+  protected readonly texturePatternTransform = computed(() => {
+    // The face is painted inside the overlay group, so that group's own scale is part of how a
+    // tile's units end up as pixels.
+    const groupScale = this.frameVisible() ? 1 : FRAME_R / FACE_R;
+    return `scale(${(VIEWBOX / (this.paintedPx() * groupScale)).toFixed(5)})`;
+  });
+
+  /**
+   * steelseries scribes its turnings with a half-pixel stroke, so this follows the painted size too.
+   * The *number* of turnings is size-dependent there as well (its step is derived from the radius in
+   * pixels); regenerating ~180 circles on every resize would cost far more than the difference shows,
+   * so the count stays the one the reference draws at 300px.
+   */
+  protected readonly scribeStrokeWidth = computed(() => {
+    const groupScale = this.frameVisible() ? 1 : FRAME_R / FACE_R;
+    return (0.5 * VIEWBOX / (this.paintedPx() * groupScale)).toFixed(4);
   });
 
   /** Set for stainless and turned only. */
@@ -950,7 +992,24 @@ export class WidgetSeaHorizonComponent {
       });
     });
 
+    this.observePaintedSize();
     this.destroyRef.onDestroy(() => this.disarmTransitions());
+  }
+
+  /**
+   * Track the painted edge length for the texture tiles. `preserveAspectRatio="xMidYMid meet"` puts
+   * the instrument in the largest square that fits, so that is the smaller of the two box sides.
+   */
+  private observePaintedSize(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(entries => {
+      const box = entries[0]?.contentRect;
+      if (!box) return;
+      const painted = Math.min(box.width, box.height);
+      if (painted > 0) this.paintedPx.set(painted);
+    });
+    observer.observe(this.host.nativeElement as HTMLElement);
+    this.destroyRef.onDestroy(() => observer.disconnect());
   }
 
   /** Stream callback for the pitch sub-field: damp the sample, then settle the transition gate. */

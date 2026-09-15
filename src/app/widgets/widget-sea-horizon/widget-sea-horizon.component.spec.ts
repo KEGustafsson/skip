@@ -26,12 +26,14 @@ interface SeaHorizonInternals {
   worldTransform: () => string;
   pointerTransform: () => string;
   frameLayers: () => { r: number; fill: string }[];
-  frameWedges: () => { d: string; c0: string; c1: string }[];
+  frameWedges: () => { a0: number; d: string; c0: string; c1: string }[];
   backgroundGradient: () => { x1?: number; y1?: number; x2?: number; y2?: number; stops: { o: string; c: string }[] } | null;
   backgroundTexture: () => { size: number; shapes: { d: string; fill: string }[] } | null;
-  backgroundWedges: () => { d: string; c0: string; c1: string }[];
+  backgroundWedges: () => { a0: number; d: string; c0: string; c1: string }[];
   turnedScribes: () => { cx: number; cy: number; r: number; stroke: string }[];
   faceVignette: () => boolean;
+  texturePatternTransform: () => string;
+  scribeStrokeWidth: () => string;
   faceFill: () => string;
   labelColor: () => string;
   symbolColor: () => string;
@@ -504,16 +506,32 @@ describe('WidgetSeaHorizonComponent bezel finishes', () => {
   it('draws a brushed finish as a wedge ring and no circles', () => {
     const blackMetal = finish('blackMetal');
     expect(blackMetal.layers).toHaveLength(0);
-    expect(blackMetal.wedges).toHaveLength(24);
+    expect(blackMetal.wedges.length).toBeGreaterThanOrEqual(24);
+  });
+
+  /**
+   * Every colour stop gets a wedge edge of its own, on top of the regular subdivision. A wedge
+   * carries a two-colour gradient, so one straddling a stop averages across it — which measured 3.8
+   * RGB counts out over the chrome bezel, with excursions of 29, against the real gauge.
+   */
+  it('gives every colour stop a wedge edge of its own', () => {
+    for (const [design, stops] of [['blackMetal', [45, 115.0002, 180, 235.0001, 315]],
+                                   ['chrome', [10.8, 46.8, 61.2, 72, 115.2, 133.2]]] as const) {
+      const starts = finish(design).wedges.map(w => w.a0);
+      for (const stop of stops) {
+        expect(starts.some(a => Math.abs(a - stop) < 0.001)).toBe(true);
+      }
+    }
   });
 
   // Sampling the real gauge gives white at the top, black on the diagonals and grey at the sides;
   // if the sweep were mapped the other way round these would be inverted.
   it('sweeps a brushed finish the same way round as the real gauge', () => {
     const wedges = finish('blackMetal').wedges;
-    expect(wedges[0].c0).toBe('rgb(254, 254, 254)');          // 0°, top
-    expect(wedges[3].c0).toBe('rgb(0, 0, 0)');                // 45°
-    expect(wedges[12].c0).toBe('rgb(0, 0, 0)');               // 180°, bottom
+    const at = (deg: number) => wedges.find(w => Math.abs(w.a0 - deg) < 0.001)?.c0;
+    expect(at(0)).toBe('rgb(254, 254, 254)');          // top
+    expect(at(45)).toBe('rgb(0, 0, 0)');
+    expect(at(180)).toBe('rgb(0, 0, 0)');              // bottom
   });
 
   it('keeps the extra layers a multi-pass finish needs', () => {
@@ -593,5 +611,81 @@ describe('WidgetSeaHorizonComponent dial faces', () => {
 
   it('falls back to carbon for a face it does not know', () => {
     expect(face('not-a-face').backgroundTexture()?.size).toBe(12);
+  });
+});
+
+/**
+ * The texture tiles are the one thing here specified in device pixels rather than as a fraction of
+ * the dial, so they are the one thing that has to know how big the widget was painted. These drive
+ * the ResizeObserver callback directly rather than waiting on a layout that jsdom never performs.
+ */
+describe('WidgetSeaHorizonComponent texture scale', () => {
+  const originalResizeObserver = globalThis.ResizeObserver;
+  let measure: ((width: number, height: number) => void) | null = null;
+
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    measure = null;
+    class CapturingResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        measure = (width, height) =>
+          callback([{ contentRect: { width, height } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      public observe(): void { /* the spec drives the callback itself */ }
+      public unobserve(): void { /* unused */ }
+      public disconnect(): void { /* unused */ }
+    }
+    globalThis.ResizeObserver = CapturingResizeObserver as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => { globalThis.ResizeObserver = originalResizeObserver; });
+
+  function paintedAt(width: number, height: number, gauge: GaugeOverrides = {}) {
+    TestBed.resetTestingModule();
+    const h = mount(baseConfig({ noFrameVisible: true, backgroundColor: 'carbon', ...gauge }));
+    measure?.(width, height);
+    h.fixture.detectChanges();
+    return h.component;
+  }
+
+  /**
+   * The invariant the whole mechanism exists for: carbon's tile is 12 device pixels on a Classic
+   * Steel gauge at any size, so it has to be 12 device pixels here too. Sized in viewBox units
+   * instead it is a fixed fraction of the dial, which measured 7 RGB counts out against the real
+   * gauge at every size except the 300 the viewBox happens to be.
+   */
+  it('keeps a texture tile the size steelseries draws it, whatever the widget is painted at', () => {
+    for (const painted of [150, 300, 380, 600]) {
+      const c = paintedAt(painted, painted, { noFrameVisible: true });
+      const scale = Number(/scale\(([\d.]+)\)/.exec(c.texturePatternTransform())?.[1]);
+      const tileUnits = (c.backgroundTexture()?.size ?? 0) * scale;
+      expect(tileUnits * (painted / 300)).toBeCloseTo(12, 3);
+    }
+  });
+
+  // xMidYMid meet paints into the largest square that fits, so an oblong tile is sized by its
+  // shorter side; taking the width would shrink the weave on a wide, short tile.
+  it('measures the square the instrument is actually painted into', () => {
+    expect(paintedAt(600, 200).texturePatternTransform()).toBe('scale(1.50000)');
+    expect(paintedAt(200, 600).texturePatternTransform()).toBe('scale(1.50000)');
+  });
+
+  // With the case hidden the face is painted inside a group that scales it up to the whole tile,
+  // which would carry the tile with it.
+  it('divides out the scale the frameless face is drawn under', () => {
+    expect(paintedAt(300, 300, { noFrameVisible: true }).texturePatternTransform()).toBe('scale(1.00000)');
+    expect(paintedAt(300, 300, { noFrameVisible: false }).texturePatternTransform()).toBe('scale(0.83000)');
+  });
+
+  it('falls back to the authored size when nothing ever measures the widget', () => {
+    TestBed.resetTestingModule();
+    const c = mount(baseConfig({ noFrameVisible: true, backgroundColor: 'carbon' })).component;
+    expect(c.texturePatternTransform()).toBe('scale(1.00000)');
+  });
+
+  // steelseries scribes its turnings with a half-pixel stroke, so this follows the painted size too.
+  it('scribes the turnings with a half-pixel stroke', () => {
+    expect(paintedAt(600, 600, { noFrameVisible: true, backgroundColor: 'turned' }).scribeStrokeWidth()).toBe('0.2500');
+    expect(paintedAt(150, 150, { noFrameVisible: true, backgroundColor: 'turned' }).scribeStrokeWidth()).toBe('1.0000');
   });
 });
