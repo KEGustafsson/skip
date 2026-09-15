@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WidgetSeaHorizonComponent } from './widget-sea-horizon.component';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
-import { WidgetStreamsDirective } from '../../core/directives/widget-streams.directive';
+import { WidgetStreamsDirective, widgetPathSignature } from '../../core/directives/widget-streams.directive';
 import type { IPathUpdate } from '../../core/services/data.service';
 import type { IWidgetSvcConfig } from '../../core/interfaces/widgets-interface';
 
@@ -58,9 +58,14 @@ interface Harness {
   /** Latest callback registered for a path key, so a test can push a reading through it. */
   emit: (pathKey: string, value: number | null) => void;
   observed: { pathName: string; subField?: string }[];
-  /** Every callback handed to observe(), in order, so identity across re-registrations can be checked. */
-  registered: { pathName: string; next: StreamCallback }[];
+  /** The fake's live subscriptions, keyed by path. A new object means the pipeline was rebuilt. */
+  subscriptions: () => Map<string, FakeSubscription>;
+  /** How many times the fake has built a pipeline. Unchanged across a call it treats as a no-op. */
+  rebuilds: () => number;
 }
+
+/** One live subscription in the fake, mirroring what the real directive keys a rebuild on. */
+interface FakeSubscription { next: StreamCallback; subField?: string; signature: string; }
 
 /**
  * Mount the widget against local fakes for the two host directives, and capture the stream
@@ -71,7 +76,8 @@ function mount(config: IWidgetSvcConfig): Harness {
   const options = signal<IWidgetSvcConfig | undefined>(config);
   const callbacks = new Map<string, StreamCallback>();
   const observed: { pathName: string; subField?: string }[] = [];
-  const registered: { pathName: string; next: StreamCallback }[] = [];
+  const subscriptions = new Map<string, FakeSubscription>();
+  let rebuilds = 0;
 
   TestBed.configureTestingModule({
     imports: [WidgetSeaHorizonComponent],
@@ -80,10 +86,17 @@ function mount(config: IWidgetSvcConfig): Harness {
       {
         provide: WidgetStreamsDirective,
         useValue: {
+          // Mirrors WidgetStreamsDirective.observe: an unchanged (signature, callback, sub-field)
+          // triple is a no-op, anything else tears the pipeline down and rebuilds it. The real
+          // widgetPathSignature is used so the fake cannot drift from the rule it models.
           observe: (pathName: string, next: StreamCallback, subField?: string) => {
             callbacks.set(pathName, next);
             observed.push({ pathName, subField });
-            registered.push({ pathName, next });
+            const signature = widgetPathSignature(options()?.paths?.[pathName]) ?? '';
+            const live = subscriptions.get(pathName);
+            if (live && live.signature === signature && live.next === next && live.subField === subField) return;
+            subscriptions.set(pathName, { next, subField, signature });
+            rebuilds++;
           }
         }
       }
@@ -101,7 +114,8 @@ function mount(config: IWidgetSvcConfig): Harness {
     fixture,
     options,
     observed,
-    registered,
+    subscriptions: () => subscriptions,
+    rebuilds: () => rebuilds,
     emit: (pathKey, value) => callbacks.get(pathKey)?.({ data: { value } } as unknown as IPathUpdate)
   };
 }
@@ -179,21 +193,41 @@ describe('WidgetSeaHorizonComponent stream wiring', () => {
     expect(h.component.heelText()).toBe('25.0° STBD');
   });
 
-  // WidgetStreamsDirective keeps a subscription only while it is handed the same callback; a fresh
-  // closure per effect run would tear down and rebuild both pipelines on every unrelated edit.
-  it('hands the streams directive the same callback across unrelated config changes', () => {
+  // WidgetStreamsDirective rebuilds a pipeline unless it is handed the same signature, callback and
+  // sub-field, so a fresh closure per effect run would tear down and re-subscribe both paths on
+  // every unrelated edit — replaying the last value through the damper and restarting the stale
+  // window. The fake models that rule, so this asserts the pipelines survive rather than merely
+  // that the callback reference happens to match.
+  it('keeps both stream pipelines alive across unrelated config changes', () => {
     const h = mount(baseConfig());
-    const firstRoll = h.registered.find(r => r.pathName === 'gaugeRollPath')?.next;
-    const firstPitch = h.registered.find(r => r.pathName === 'gaugePitchPath')?.next;
+    expect(h.rebuilds()).toBe(2);
+    const pitch = h.subscriptions().get('gaugePitchPath');
+    const roll = h.subscriptions().get('gaugeRollPath');
 
     h.options.set(baseConfig({ faceColor: 'chrome', damping: 3, invertRoll: true }));
     h.fixture.detectChanges();
 
-    const rolls = h.registered.filter(r => r.pathName === 'gaugeRollPath');
-    const pitches = h.registered.filter(r => r.pathName === 'gaugePitchPath');
-    expect(rolls.length).toBeGreaterThan(1);
-    expect(rolls.every(r => r.next === firstRoll)).toBe(true);
-    expect(pitches.every(r => r.next === firstPitch)).toBe(true);
+    expect(h.rebuilds()).toBe(2);
+    expect(h.subscriptions().get('gaugePitchPath')).toBe(pitch);
+    expect(h.subscriptions().get('gaugeRollPath')).toBe(roll);
+  });
+
+  // The negative case: without it the test above would pass even if the fake could never observe a
+  // rebuild at all.
+  it('rebuilds both stream pipelines when the configured path changes', () => {
+    const h = mount(baseConfig());
+    expect(h.rebuilds()).toBe(2);
+
+    h.options.set({
+      ...baseConfig(),
+      paths: {
+        gaugePitchPath: { ...ATTITUDE_PATHS.gaugePitchPath, source: 'imu-2' },
+        gaugeRollPath: { ...ATTITUDE_PATHS.gaugeRollPath, source: 'imu-2' }
+      }
+    } as unknown as IWidgetSvcConfig);
+    h.fixture.detectChanges();
+
+    expect(h.rebuilds()).toBe(4);
   });
 });
 
