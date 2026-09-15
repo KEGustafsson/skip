@@ -75,6 +75,10 @@ function polar(r: number, deg: number): [number, number] {
   return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
 }
 
+/**
+ * A filled arc segment between two radii, used for the nominal / caution / alarm bands. Angles are
+ * in the same 12-o'clock-clockwise frame as {@link polar}, so a span reads port-to-starboard.
+ */
 function bandPath(rIn: number, rOut: number, a0: number, a1: number): string {
   const [ox0, oy0] = polar(rOut, a0);
   const [ox1, oy1] = polar(rOut, a1);
@@ -87,6 +91,7 @@ function bandPath(rIn: number, rOut: number, a0: number, a1: number): string {
     ` A${rIn},${rIn} 0 ${large} 0 ${ix0.toFixed(2)},${iy0.toFixed(2)} Z`;
 }
 
+/** Confine a value to an inclusive range. */
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }

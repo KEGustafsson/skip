@@ -36,6 +36,11 @@ const ATTITUDE_PATHS = {
 
 type GaugeOverrides = Partial<NonNullable<IWidgetSvcConfig['gauge']>>;
 
+/**
+ * A merged config as the runtime directive would hand it to the widget, with the gauge block
+ * overridable per test. The specs provide it directly rather than leaning on DEFAULT_CONFIG, so a
+ * test states the settings it depends on instead of inheriting them silently.
+ */
 function baseConfig(gauge: GaugeOverrides = {}): IWidgetSvcConfig {
   return {
     numDecimal: 1,
@@ -54,6 +59,11 @@ interface Harness {
   observed: { pathName: string; subField?: string }[];
 }
 
+/**
+ * Mount the widget against local fakes for the two host directives, and capture the stream
+ * callbacks it registers so a test can push readings through them. Each call configures a testing
+ * module, so a test comparing two mounts has to reset the module between them.
+ */
 function mount(config: IWidgetSvcConfig): Harness {
   const options = signal<IWidgetSvcConfig | undefined>(config);
   const callbacks = new Map<string, StreamCallback>();
