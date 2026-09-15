@@ -72,6 +72,7 @@ Skip widgets turn Signal K data into readable visuals and controls. Available wi
 - **Level Gauge** – Dual-scale heel angle indicator for trim tuning and sea-state monitoring.
 - **Pitch & Roll** – Horizon-style attitude indicator showing live pitch and roll degrees.
 - **Classic Steel** – Traditional steel-look linear & radial gauges with range sizes and zone highlights.
+- **Steel Compass** – Classic steel binnacle compass: the card turns under a fixed pointer, heading on an LCD window.
 - **Windsteer** – Combines wind, wind sectors, heading, COG, and waypoint info for wind steering.
 - **Wind Trends** – Real-time True Wind trends with dual axes for direction and speed, live values, and averages.
 - **Battery Monitor** - Display batteries or whole banks state State of Charge, remaining capacity, remaining time, voltage, current, power flow, and temperature.

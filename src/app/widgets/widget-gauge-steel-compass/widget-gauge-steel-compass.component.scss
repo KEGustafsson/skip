@@ -1,0 +1,68 @@
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+// Two layers on one box: the painted case underneath, the card drawn over it. Both fit the same
+// centred square, so every coordinate in the viewBox lands where it does on the painted face.
+.compass {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.case,
+.card-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.card {
+  // The card carries momentum on a real compass; this is the same swing, taken the short way round
+  // because the component feeds it an unbounded angle rather than a value that wraps at north.
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+text {
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+.face-title {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+.lcd-unit,
+.lcd-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.lcd-unit {
+  font-size: 22px;
+  font-weight: 500;
+  opacity: 0.72;
+}
+
+.lcd-value {
+  font-size: 46px;
+  font-weight: 700;
+}
+
+// No reading yet, or the path was re-pointed at one that reports nothing: the card sits on 000,
+// which is a heading of north to anyone glancing at it. Dimming says the number under the index is
+// not a measurement, and the LCD reads `---` beside it.
+.compass.stale .card {
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}

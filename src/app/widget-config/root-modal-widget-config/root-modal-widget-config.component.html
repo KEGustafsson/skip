@@ -683,7 +683,7 @@
                 </ng-container>
               }
               <!-- Steelgauge -->
-              @if (widgetConfig?.gauge?.type === "steel" || widgetConfig?.gauge?.type === 'horizon') {
+              @if (widgetConfig?.gauge?.type === "steel" || widgetConfig?.gauge?.type === 'steelCompass' || widgetConfig?.gauge?.type === 'horizon') {
                 @if (widgetConfig?.gauge?.type !== 'horizon') {
                   <mat-form-field formGroupName="gauge">
                     <mat-label>Background Style</mat-label>
@@ -821,6 +821,18 @@
             </paths-options>
           </div>
         </mat-tab>
+      }
+      <!-- Steel compass card -->
+      @if (widgetConfig?.gauge?.type === "steelCompass") {
+      <mat-tab label="Settings" formGroupName="gauge">
+        <div class="display-content tab-content">
+          <p>
+            <mat-checkbox formControlName="degreeScale" name="degreeScale">
+              Print the degree scale on the card
+            </mat-checkbox>
+          </p>
+        </div>
+      </mat-tab>
       }
       <!-- Gauge stuff -->
       @if (widgetConfig?.gauge?.type === "steel") {
