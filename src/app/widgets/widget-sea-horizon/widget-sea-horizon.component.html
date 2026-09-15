@@ -6,25 +6,38 @@
   [attr.aria-label]="ariaLabel()"
 >
   <defs>
-    <!-- Bezel: bright at the top, dark where the metal turns away, lifting again at the bottom -->
-    <linearGradient [attr.id]="ids().frame" x1="0" y1="0" x2="0" y2="1">
-      @for (s of frameStops(); track $index) {
-        <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+    <!-- Bezel finish. Circle stacks for most finishes, a wedge ring for the brushed ones. -->
+    @for (g of frameGradients(); track g.id) {
+      @if (g.kind === 'linear') {
+        <linearGradient
+          [attr.id]="g.id" gradientUnits="userSpaceOnUse"
+          [attr.x1]="g.x1" [attr.y1]="g.y1" [attr.x2]="g.x2" [attr.y2]="g.y2"
+        >
+          @for (s of g.stops; track $index) {
+            <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+          }
+        </linearGradient>
+      } @else {
+        <radialGradient
+          [attr.id]="g.id" gradientUnits="userSpaceOnUse"
+          [attr.cx]="g.cx" [attr.cy]="g.cy" [attr.r]="g.r"
+        >
+          @for (s of g.stops; track $index) {
+            <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+          }
+        </radialGradient>
       }
-    </linearGradient>
-    <!-- Inner bevel runs the other way, so the two rings read as a chamfer -->
-    <linearGradient [attr.id]="ids().bevel" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0C0E0F" />
-      <stop offset="0.35" stop-color="#2B3033" />
-      <stop offset="0.62" stop-color="#5A6165" />
-      <stop offset="1" stop-color="#B9BEC0" />
-    </linearGradient>
-    <radialGradient [attr.id]="ids().face" cx="0.5" cy="0.44" r="0.72">
-      <stop offset="0" stop-color="#4E565A" />
-      <stop offset="0.48" stop-color="#3A4145" />
-      <stop offset="0.8" stop-color="#252A2D" />
-      <stop offset="1" stop-color="#14181A" />
-    </radialGradient>
+    }
+    @for (w of frameWedges(); track w.id) {
+      <linearGradient
+        [attr.id]="w.id" gradientUnits="userSpaceOnUse"
+        [attr.x1]="w.x1" [attr.y1]="w.y1" [attr.x2]="w.x2" [attr.y2]="w.y2"
+      >
+        <stop offset="0" [attr.stop-color]="w.c0" />
+        <stop offset="1" [attr.stop-color]="w.c1" />
+      </linearGradient>
+    }
+
     <linearGradient [attr.id]="ids().sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#2E5E78" />
       <stop offset="1" stop-color="#53809A" />
@@ -33,16 +46,45 @@
       <stop offset="0" stop-color="#12414F" />
       <stop offset="1" stop-color="#07222C" />
     </linearGradient>
-    <linearGradient [attr.id]="ids().glass" x1="0" y1="0" x2="0.25" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22" />
-      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.05" />
-      <stop offset="0.7" stop-color="#FFFFFF" stop-opacity="0" />
+
+    <!-- Face shading, from the steel gauges' own background: a rim shadow and a side vignette. -->
+    <radialGradient
+      [attr.id]="ids().shadow" gradientUnits="userSpaceOnUse"
+      [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR"
+    >
+      @for (s of faceShadowStops; track $index) {
+        <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+      }
+    </radialGradient>
+    <linearGradient
+      [attr.id]="ids().vignette" gradientUnits="userSpaceOnUse"
+      [attr.x1]="faceShadowR" y1="0" [attr.x2]="300 - faceShadowR" y2="0"
+    >
+      @for (s of faceVignetteStops; track $index) {
+        <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+      }
     </linearGradient>
-    <linearGradient [attr.id]="ids().lcd" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#AFB89C" />
-      <stop offset="0.5" stop-color="#C3CBB0" />
-      <stop offset="1" stop-color="#AFB89C" />
+
+    <!-- Glass dome across the upper half -->
+    <linearGradient
+      [attr.id]="ids().glass" gradientUnits="userSpaceOnUse"
+      x1="0" [attr.y1]="glassGrad.y1" x2="0" [attr.y2]="glassGrad.y2"
+    >
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.275" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.015" />
     </linearGradient>
+
+    <linearGradient [attr.id]="ids().lcdBezel" x1="0" y1="0" x2="0" y2="1">
+      @for (s of lcdBezelStops; track $index) {
+        <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+      }
+    </linearGradient>
+    <linearGradient [attr.id]="ids().lcdFace" x1="0" y1="0" x2="0" y2="1">
+      @for (s of lcdFaceStops; track $index) {
+        <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+      }
+    </linearGradient>
+
     <clipPath [attr.id]="ids().window">
       <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="winR" />
     </clipPath>
@@ -50,14 +92,18 @@
 
   <!-- Case -->
   @if (frameVisible()) {
-    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="frameR" [attr.fill]="url().frame" />
-    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="bevelR" [attr.fill]="url().bevel" />
-    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="gapR" fill="#0A0C0D" />
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="frameR" fill="#848484" stroke="rgba(132,132,132,0.5)" />
+    @for (layer of frameLayers(); track $index) {
+      <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="layer.r" [attr.fill]="layer.fill" />
+    }
+    @for (w of frameWedges(); track w.id) {
+      <path [attr.d]="w.d" [attr.fill]="'url(#' + w.id + ')'" />
+    }
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="frameInnerR" fill="#BFBFBF" />
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceR" fill="#0A0C0D" />
   }
 
   <g [attr.transform]="dialTransform()">
-    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceR" [attr.fill]="url().face" />
-
     <!-- Horizon window. The world rotates against a boat-fixed dial. -->
     <g [attr.clip-path]="url().window">
       <g
@@ -160,26 +206,25 @@
     <!-- LCD insets -->
     <g class="lcd">
       <rect
-        [attr.x]="lcdHeel.x - 1.5" [attr.y]="lcdHeel.y - 1.5"
-        [attr.width]="lcdHeel.w + 3" [attr.height]="lcdHeel.h + 3" rx="2.5" class="lcd-surround"
+        [attr.x]="lcdHeel.x - 2" [attr.y]="lcdHeel.y - 2"
+        [attr.width]="lcdHeel.w + 4" [attr.height]="lcdHeel.h + 4" rx="2.5" [attr.fill]="url().lcdBezel"
       />
-      <rect [attr.x]="lcdHeel.x" [attr.y]="lcdHeel.y" [attr.width]="lcdHeel.w" [attr.height]="lcdHeel.h" rx="1.5" [attr.fill]="url().lcd" />
-      <rect [attr.x]="lcdHeel.x" [attr.y]="lcdHeel.y" [attr.width]="lcdHeel.w" [attr.height]="lcdHeel.h * 0.42" rx="1.5" class="lcd-sheen" />
+      <rect [attr.x]="lcdHeel.x" [attr.y]="lcdHeel.y" [attr.width]="lcdHeel.w" [attr.height]="lcdHeel.h" rx="1.5" [attr.fill]="url().lcdFace" />
       <text [attr.x]="cx" [attr.y]="lcdHeel.textY" [attr.font-size]="lcdHeel.size" text-anchor="middle">{{ heelText() }}</text>
 
       <rect
-        [attr.x]="lcdTrim.x - 1.5" [attr.y]="lcdTrim.y - 1.5"
-        [attr.width]="lcdTrim.w + 3" [attr.height]="lcdTrim.h + 3" rx="2.5" class="lcd-surround"
+        [attr.x]="lcdTrim.x - 2" [attr.y]="lcdTrim.y - 2"
+        [attr.width]="lcdTrim.w + 4" [attr.height]="lcdTrim.h + 4" rx="2.5" [attr.fill]="url().lcdBezel"
       />
-      <rect [attr.x]="lcdTrim.x" [attr.y]="lcdTrim.y" [attr.width]="lcdTrim.w" [attr.height]="lcdTrim.h" rx="1.5" [attr.fill]="url().lcd" />
-      <rect [attr.x]="lcdTrim.x" [attr.y]="lcdTrim.y" [attr.width]="lcdTrim.w" [attr.height]="lcdTrim.h * 0.42" rx="1.5" class="lcd-sheen" />
+      <rect [attr.x]="lcdTrim.x" [attr.y]="lcdTrim.y" [attr.width]="lcdTrim.w" [attr.height]="lcdTrim.h" rx="1.5" [attr.fill]="url().lcdFace" />
       <text [attr.x]="cx" [attr.y]="lcdTrim.textY" [attr.font-size]="lcdTrim.size" text-anchor="middle">{{ trimText() }}</text>
     </g>
-
-    <!-- Glass over everything -->
-    <g class="glass">
-      <ellipse [attr.cx]="glass.cx" [attr.cy]="glass.cy" [attr.rx]="glass.rx" [attr.ry]="glass.ry" [attr.fill]="url().glass" />
-      <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceR" class="glass-rim" />
-    </g>
   </g>
+
+  <!-- Face shading and glass sit above the dial, in case space, exactly as the steel gauges layer them -->
+  <g class="face-shading" pointer-events="none">
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="url().shadow" />
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="url().vignette" />
+  </g>
+  <path class="glass" [attr.d]="glassPath" [attr.fill]="url().glass" pointer-events="none" />
 </svg>

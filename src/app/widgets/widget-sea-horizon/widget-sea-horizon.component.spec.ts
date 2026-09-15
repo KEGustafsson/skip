@@ -24,7 +24,8 @@ interface SeaHorizonInternals {
   noData: () => boolean;
   worldTransform: () => string;
   pointerTransform: () => string;
-  frameStops: () => { o: string; c: string }[];
+  frameLayers: () => { r: number; fill: string }[];
+  frameWedges: () => { d: string; c0: string; c1: string }[];
   ready: () => boolean;
 }
 
@@ -333,13 +334,14 @@ describe('WidgetSeaHorizonComponent dial geometry', () => {
   it('draws the bezel and leaves the dial unscaled when Show Frame is on', () => {
     const h = mount(baseConfig({ noFrameVisible: true }));
     expect(h.component.frameVisible()).toBe(true);
-    expect(h.component.dialTransform()).toBeNull();
+    // The dial is laid out against a 112 radius and scaled onto the 124.5 steelseries face.
+    expect(h.component.dialTransform()).toContain('scale(1.1116)');
   });
 
-  it('hides the bezel and grows the dial when Show Frame is off', () => {
+  it('hides the bezel and grows the dial into the whole tile when Show Frame is off', () => {
     const h = mount(baseConfig({ noFrameVisible: false }));
     expect(h.component.frameVisible()).toBe(false);
-    expect(h.component.dialTransform()).toContain('scale(1.3)');
+    expect(h.component.dialTransform()).toContain('scale(1.3393)');
   });
 
   it('rotates the world against the boat, not the boat against the world', () => {
@@ -451,16 +453,43 @@ describe('WidgetSeaHorizonComponent bezel finishes', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
   /** Each mount needs its own module, so finishes are captured one at a time and compared after. */
-  function stopsFor(faceColor: string): { o: string; c: string }[] {
+  function finish(faceColor: string) {
     TestBed.resetTestingModule();
-    return mount(baseConfig({ faceColor })).component.frameStops();
+    const c = mount(baseConfig({ faceColor })).component;
+    return { layers: c.frameLayers(), wedges: c.frameWedges() };
   }
 
-  it('uses the stored faceColor finish', () => {
-    expect(stopsFor('brass')).not.toEqual(stopsFor('anthracite'));
+  // The case is steelseries' own, so the finishes have to be too — these pin the shape each one
+  // takes, not just that they differ.
+  it('draws a gradient-stack finish as filled circles and no wedges', () => {
+    const anthracite = finish('anthracite');
+    expect(anthracite.layers).toHaveLength(1);
+    expect(anthracite.layers[0].r).toBeCloseTo(148.598, 3);
+    expect(anthracite.layers[0].fill).toContain('url(#');
+    expect(anthracite.wedges).toHaveLength(0);
+  });
+
+  // SVG has no conical gradient, so a brushed finish becomes a ring of wedges instead.
+  it('draws a brushed finish as a wedge ring and no circles', () => {
+    const blackMetal = finish('blackMetal');
+    expect(blackMetal.layers).toHaveLength(0);
+    expect(blackMetal.wedges).toHaveLength(24);
+  });
+
+  // Sampling the real gauge gives white at the top, black on the diagonals and grey at the sides;
+  // if the sweep were mapped the other way round these would be inverted.
+  it('sweeps a brushed finish the same way round as the real gauge', () => {
+    const wedges = finish('blackMetal').wedges;
+    expect(wedges[0].c0).toBe('rgb(254, 254, 254)');          // 0°, top
+    expect(wedges[3].c0).toBe('rgb(0, 0, 0)');                // 45°
+    expect(wedges[12].c0).toBe('rgb(0, 0, 0)');               // 180°, bottom
+  });
+
+  it('keeps the extra layers a multi-pass finish needs', () => {
+    expect(finish('glossyMetal').layers).toHaveLength(4);
   });
 
   it('falls back to anthracite for a finish it does not know', () => {
-    expect(stopsFor('not-a-finish')).toEqual(stopsFor('anthracite'));
+    expect(finish('not-a-finish')).toEqual(finish('anthracite'));
   });
 });

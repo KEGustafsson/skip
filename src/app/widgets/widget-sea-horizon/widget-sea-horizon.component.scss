@@ -109,26 +109,8 @@
   }
 }
 
-.lcd {
-  .lcd-surround {
-    fill: #0b0d0e;
-    opacity: 0.85;
-  }
-
-  .lcd-sheen {
-    fill: #fff;
-    opacity: 0.16;
-  }
-
-  text {
-    fill: #1d2430;
-    font-weight: 700;
-  }
-}
-
-.glass-rim {
-  fill: none;
-  stroke: #000;
-  stroke-opacity: 0.45;
-  stroke-width: 2;
+// LCD digits in steelseries' own STANDARD ink colour.
+.lcd text {
+  fill: rgb(35 42 52);
+  font-weight: 700;
 }

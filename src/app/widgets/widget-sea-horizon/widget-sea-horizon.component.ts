@@ -30,29 +30,44 @@ import { WidgetStreamsDirective, widgetPathSignature } from '../../core/directiv
 // ---------------------------------------------------------------------------
 const CX = 150;
 const CY = 150;
-/** Outer edge of the bezel. */
-const FRAME_R = 148;
-/** Inner bevel ring. */
-const BEVEL_R = 128;
-/** Dark separator between bevel and face. */
-const GAP_R = 118;
-/** The dial face itself. */
-const FACE_R = 112;
+
+// The case is the steelseries Classic Steel case, reproduced exactly: every radius below is the
+// fraction drawFrame.js uses, resolved against this 300x300 viewBox, and the finishes further down
+// carry that library's own gradient stops. Skip's Classic Steel widget renders the real library, so
+// the two sit side by side on a dashboard and have to agree.
+/** Outer edge of the case. */
+const FRAME_R = 150;
+/** The bright ring between finish and face (0.841121). */
+const FRAME_INNER_R = 126.168;
+/** The dial face (0.83). */
+const FACE_R = 124.5;
+/** Radius the face's inner shadow and side vignette are drawn to (0.831775). */
+const FACE_SHADOW_R = 124.766;
+/**
+ * Bounds of the ring a conical finish fills (0.42056 and 0.495327 of the width). The outer bound is
+ * also the radius of the circle every other finish paints its gradient on.
+ */
+const CONIC_INNER_R = 126.168;
+const CONIC_OUTER_R = 148.598;
+
+/**
+ * The dial — window, scale, reference symbol and LCDs — is laid out against this radius and then
+ * scaled onto the real face. Keeping a design radius separate from the face radius means the case
+ * can follow steelseries' proportions without every tick and label having to be re-tuned.
+ */
+const DIAL_R = 112;
 /** The window the horizon is drawn through. */
 const WIN_R = 78;
 /** Pixels per degree of pitch. Aviation ladders run ~5px/deg over ±30°; a hull needs ±15°. */
 const PITCH_PX_PER_DEG = 5.8;
 /** Largest heel the scale is ruled to. */
 const HEEL_SCALE_MAX = 45;
-/** Applied to the whole dial when the bezel is hidden, so it still fills the tile. */
-const NO_FRAME_SCALE = 1.3;
-
-const BAND_R_INNER = FACE_R - 13;
-const BAND_R_OUTER = FACE_R - 8;
-const TICK_R = FACE_R - 3;
-const NUMERAL_R = FACE_R - 24;
-const LIMIT_R_OUTER = FACE_R - 2;
-const LIMIT_R_INNER = FACE_R - 20;
+const BAND_R_INNER = DIAL_R - 13;
+const BAND_R_OUTER = DIAL_R - 8;
+const TICK_R = DIAL_R - 3;
+const NUMERAL_R = DIAL_R - 24;
+const LIMIT_R_OUTER = DIAL_R - 2;
+const LIMIT_R_INNER = DIAL_R - 20;
 
 const COLOR_NOMINAL = '#2FA84F';
 const COLOR_CAUTION = '#E8912B';
@@ -133,65 +148,205 @@ for (const p of [-15, -12.5, -10, -7.5, -5, -2.5, 2.5, 5, 7.5, 10, 12.5, 15]) {
 }
 
 /** The rim index the heel scale is read against. Points inward from the bezel. */
-const POINTER_PATH = `M${CX},${CY - (FACE_R - 1) + 15} l-8.5,-15 l17,0 Z`;
+const POINTER_PATH = `M${CX},${CY - (DIAL_R - 1) + 15} l-8.5,-15 l17,0 Z`;
 
-const GLASS_ELLIPSE = { cx: CX, cy: CY - FACE_R * 0.34, rx: FACE_R * 0.92, ry: FACE_R * 0.56 };
+/**
+ * The glass. This is drawForeground.js's type-1 highlight, its bezier control points resolved
+ * against the viewBox — the dome across the upper half that makes the steel gauges read as glazed.
+ */
+const GLASS_PATH =
+  'M25.234,152.804' +
+  ' C61.682,134.579 100.934,124.766 150,124.766' +
+  ' C201.869,124.766 236.916,133.178 274.766,152.804' +
+  ' C274.766,82.710 221.495,25.234 150,25.234' +
+  ' C78.505,25.234 25.234,82.710 25.234,152.804 Z';
+const GLASS_GRAD = { y1: 26.636, y2: 147.196 };
 
 /** LCD insets: the rect, plus the baseline of the text centred in it. */
 const LCD_HEEL = { x: CX - 56, y: CY + 46, w: 112, h: 30, size: 20, textY: CY + 46 + 15 + 20 * 0.36 };
 const LCD_TRIM = { x: CX - 40, y: CY + 82, w: 80, h: 17, size: 10.5, textY: CY + 82 + 8.5 + 10.5 * 0.36 };
 
+/** A finish is a stack of filled circles, or — for the brushed ones — a ring of conical wedges. */
+interface IFrameGradient {
+  kind: 'linear' | 'radial';
+  x1?: number; y1?: number; x2?: number; y2?: number;
+  cx?: number; cy?: number; r?: number;
+  stops: IGradientStop[];
+}
+interface IFrameLayer { r: number; grad?: number; fill?: string; }
+interface IFrameDesign {
+  gradients: IFrameGradient[];
+  layers: IFrameLayer[];
+  /** Brushed finishes are a conical sweep, which SVG has no primitive for — see conicalWedges(). */
+  conical?: { fractions: number[]; colors: string[] };
+}
+
+/** One wedge of an approximated conical sweep: an annulus segment and the colours of its two edges. */
+interface IFrameWedge { d: string; x1: number; y1: number; x2: number; y2: number; c0: string; c1: string; }
+
 /**
- * Bezel finishes, keyed by the same `gauge.faceColor` values Skip's steel gauges already store, so
- * the finish reads the same across the steel family. Each is a vertical gradient: bright at the
- * top, dark through the middle where the bezel turns away, lifting again at the bottom.
+ * Bezel finishes, taken from steelseries' drawFrame.js and resolved against this viewBox, keyed by
+ * the same `gauge.faceColor` values Skip's steel gauges already store. Generated from that source
+ * rather than transcribed, so a finish reads identically here and on a Classic Steel gauge next to it.
  */
-const FRAME_DESIGNS: Record<string, IGradientStop[]> = {
-  anthracite: [
-    { o: '0', c: '#F4F5F5' }, { o: '0.06', c: '#C3C6C8' }, { o: '0.17', c: '#4A4E51' }, { o: '0.34', c: '#101314' },
-    { o: '0.52', c: '#191D1F' }, { o: '0.72', c: '#3E4346' }, { o: '0.88', c: '#8E9396' }, { o: '1', c: '#D9DCDD' }
-  ],
-  blackMetal: [
-    { o: '0', c: '#E4E4E4' }, { o: '0.06', c: '#8A8A8A' }, { o: '0.18', c: '#1F1F1F' }, { o: '0.36', c: '#000000' },
-    { o: '0.54', c: '#0B0B0B' }, { o: '0.74', c: '#242424' }, { o: '0.89', c: '#5E5E5E' }, { o: '1', c: '#B2B2B2' }
-  ],
-  metal: [
-    { o: '0', c: '#FFFFFF' }, { o: '0.07', c: '#D6D6D6' }, { o: '0.2', c: '#8E8E8E' }, { o: '0.38', c: '#575757' },
-    { o: '0.56', c: '#6B6B6B' }, { o: '0.75', c: '#9C9C9C' }, { o: '0.9', c: '#C8C8C8' }, { o: '1', c: '#EFEFEF' }
-  ],
-  shinyMetal: [
-    { o: '0', c: '#FFFFFF' }, { o: '0.05', c: '#E8E8E8' }, { o: '0.15', c: '#9A9A9A' }, { o: '0.3', c: '#3D3D3D' },
-    { o: '0.45', c: '#EDEDED' }, { o: '0.62', c: '#4A4A4A' }, { o: '0.84', c: '#B4B4B4' }, { o: '1', c: '#FFFFFF' }
-  ],
-  chrome: [
-    { o: '0', c: '#FFFFFF' }, { o: '0.09', c: '#D2E2EE' }, { o: '0.22', c: '#3C4A54' }, { o: '0.35', c: '#FFFFFF' },
-    { o: '0.5', c: '#8FA4B4' }, { o: '0.66', c: '#1E262C' }, { o: '0.82', c: '#C3D2DC' }, { o: '1', c: '#FFFFFF' }
-  ],
-  steel: [
-    { o: '0', c: '#F0F4F6' }, { o: '0.07', c: '#B8C4CB' }, { o: '0.2', c: '#5C6B75' }, { o: '0.38', c: '#2B353C' },
-    { o: '0.56', c: '#36424A' }, { o: '0.75', c: '#6E7D87' }, { o: '0.9', c: '#A9B7BF' }, { o: '1', c: '#DCE4E8' }
-  ],
-  brass: [
-    { o: '0', c: '#F8ECC8' }, { o: '0.07', c: '#D9BC7E' }, { o: '0.2', c: '#8A6B2E' }, { o: '0.38', c: '#4A3714' },
-    { o: '0.56', c: '#5C4519' }, { o: '0.75', c: '#9A7A36' }, { o: '0.9', c: '#CBAE6E' }, { o: '1', c: '#EEDDA8' }
-  ],
-  gold: [
-    { o: '0', c: '#FFF6D0' }, { o: '0.07', c: '#F0D273' }, { o: '0.2', c: '#B8891F' }, { o: '0.38', c: '#6E4F0C' },
-    { o: '0.56', c: '#87620F' }, { o: '0.75', c: '#C99C2C' }, { o: '0.9', c: '#EFD177' }, { o: '1', c: '#FFF3C4' }
-  ],
-  tiltedGray: [
-    { o: '0', c: '#FAFAFA' }, { o: '0.1', c: '#D0D0D0' }, { o: '0.26', c: '#8C8C8C' }, { o: '0.44', c: '#6A6A6A' },
-    { o: '0.62', c: '#8C8C8C' }, { o: '0.8', c: '#BFBFBF' }, { o: '1', c: '#F2F2F2' }
-  ],
-  tiltedBlack: [
-    { o: '0', c: '#D8D8D8' }, { o: '0.1', c: '#6E6E6E' }, { o: '0.26', c: '#161616' }, { o: '0.44', c: '#000000' },
-    { o: '0.62', c: '#141414' }, { o: '0.8', c: '#3A3A3A' }, { o: '1', c: '#9A9A9A' }
-  ],
-  glossyMetal: [
-    { o: '0', c: '#FFFFFF' }, { o: '0.12', c: '#F2F2F2' }, { o: '0.28', c: '#C6C6C6' }, { o: '0.46', c: '#9E9E9E' },
-    { o: '0.6', c: '#E4E4E4' }, { o: '0.8', c: '#FBFBFB' }, { o: '1', c: '#FFFFFF' }
-  ]
+const FRAME_DESIGNS: Record<string, IFrameDesign> = {
+  metal: {
+    gradients: [
+      { kind: 'linear', x1: 0, y1: 1.402, x2: 0, y2: 297.196,
+        stops: [{ o: '0.0', c: '#FEFEFE' }, { o: '0.07', c: '#D2D2D2' }, { o: '0.12', c: '#B3B3B3' }, { o: '1.0', c: '#D5D5D5' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }]
+  },
+  brass: {
+    gradients: [
+      { kind: 'linear', x1: 0, y1: 1.402, x2: 0, y2: 297.196,
+        stops: [{ o: '0.0', c: '#F9F39B' }, { o: '0.05', c: '#F6E265' }, { o: '0.1', c: '#F0E184' }, { o: '0.5', c: '#5A3916' }, { o: '0.9', c: '#F9ED8B' }, { o: '0.95', c: '#F3E26C' }, { o: '1.0', c: '#CAB671' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }]
+  },
+  steel: {
+    gradients: [
+      { kind: 'linear', x1: 0, y1: 1.402, x2: 0, y2: 297.196,
+        stops: [{ o: '0.0', c: '#E7EDED' }, { o: '0.05', c: '#BDC7C6' }, { o: '0.1', c: '#C0C9C8' }, { o: '0.5', c: '#171F21' }, { o: '0.9', c: '#C4CDCC' }, { o: '0.95', c: '#C2CCCB' }, { o: '1.0', c: '#BDC9C7' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }]
+  },
+  gold: {
+    gradients: [
+      { kind: 'linear', x1: 0, y1: 1.402, x2: 0, y2: 297.196,
+        stops: [{ o: '0.0', c: '#FFFFCF' }, { o: '0.15', c: '#FFED60' }, { o: '0.22', c: '#FEC739' }, { o: '0.3', c: '#FFF9CB' }, { o: '0.38', c: '#FFC740' }, { o: '0.44', c: '#FCC23C' }, { o: '0.51', c: '#FFCC3B' }, { o: '0.6', c: '#D5861D' }, { o: '0.68', c: '#FFC938' }, { o: '0.75', c: '#D4871D' }, { o: '1.0', c: '#F7EE65' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }]
+  },
+  anthracite: {
+    gradients: [
+      { kind: 'linear', x1: 0, y1: 1.402, x2: 0, y2: 298.598,
+        stops: [{ o: '0.0', c: '#767587' }, { o: '0.06', c: '#4A4A52' }, { o: '0.12', c: '#323236' }, { o: '1.0', c: '#4F4F57' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }]
+  },
+  tiltedGray: {
+    gradients: [
+      { kind: 'linear', x1: 70.093, y1: 25.234, x2: 243.774, y2: 273.276,
+        stops: [{ o: '0.0', c: '#FFFFFF' }, { o: '0.07', c: '#D2D2D2' }, { o: '0.16', c: '#B3B3B3' }, { o: '0.33', c: '#FFFFFF' }, { o: '0.55', c: '#C5C5C5' }, { o: '0.79', c: '#FFFFFF' }, { o: '1.0', c: '#666666' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }]
+  },
+  tiltedBlack: {
+    gradients: [
+      { kind: 'linear', x1: 68.691, y1: 23.832, x2: 240.764, y2: 269.577,
+        stops: [{ o: '0.0', c: '#666666' }, { o: '0.21', c: '#000000' }, { o: '0.47', c: '#666666' }, { o: '0.99', c: '#000000' }, { o: '1.0', c: '#000000' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }]
+  },
+  glossyMetal: {
+    gradients: [
+      { kind: 'radial', cx: 150.0, cy: 150.0, r: 150.0,
+        stops: [{ o: '0.0', c: '#CFCFCF' }, { o: '0.96', c: '#CDCCCD' }, { o: '1.0', c: '#F4F4F4' }] },
+      { kind: 'linear', x1: 0, y1: 8.411, x2: 0, y2: 291.589,
+        stops: [{ o: '0.0', c: '#F9F9F9' }, { o: '0.23', c: '#C8C3BF' }, { o: '0.36', c: '#FFFFFF' }, { o: '0.59', c: '#1D1D1D' }, { o: '0.76', c: '#C8C2C0' }, { o: '1.0', c: '#D1D1D1' }] },
+    ],
+    layers: [{ r: 148.598, grad: 0 }, { r: 146.094, grad: 1 }, { r: 130.374, fill: '#F6F6F6' }, { r: 127.5, fill: '#333333' }]
+  },
+  blackMetal: {
+    gradients: [], layers: [],
+    conical: {
+      fractions: [0.0, 0.125, 0.347222, 0.5, 0.680555, 0.875, 1.0],
+      colors: ['#FEFEFE', '#000000', '#999999', '#000000', '#999999', '#000000', '#FEFEFE']
+    }
+  },
+  shinyMetal: {
+    gradients: [], layers: [],
+    conical: {
+      fractions: [0.0, 0.125, 0.25, 0.347222, 0.5, 0.652777, 0.75, 0.875, 1.0],
+      colors: ['#FEFEFE', '#D2D2D2', '#B3B3B3', '#EEEEEE', '#A0A0A0', '#EEEEEE', '#B3B3B3', '#D2D2D2', '#FEFEFE']
+    }
+  },
+  chrome: {
+    gradients: [], layers: [],
+    conical: {
+      fractions: [0.0, 0.09, 0.12, 0.16, 0.25, 0.29, 0.33, 0.38, 0.48, 0.52, 0.63, 0.68, 0.8, 0.83, 0.87, 0.97, 1.0],
+      colors: ['#FFFFFF', '#FFFFFF', '#88888A', '#A4B9BE', '#9EB3B6', '#707070', '#DDE3E3', '#9BB0B3', '#9CB0B1', '#FEFFFF', '#FFFFFF', '#9CB4B4', '#C6D1D3', '#F6F8F7', '#CCD8D8', '#A4BCBE', '#FFFFFF']
+    }
+  },
 };
+
+/** Linear RGB interpolation between two #rrggbb colours, which is what steelseries' sweep uses. */
+function mixHex(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (sh: number) => {
+    const va = (pa >> sh) & 255, vb = (pb >> sh) & 255;
+    return Math.round(va + (vb - va) * t);
+  };
+  return `rgb(${ch(16)}, ${ch(8)}, ${ch(0)})`;
+}
+
+/**
+ * Colour of a conical sweep at a screen angle, measured clockwise from 12 o'clock.
+ *
+ * steelseries builds these per-pixel from `atan2` and then flips the buffer vertically, which works
+ * out to fraction = 1 - deg/360. That mapping was confirmed against a rendered gauge rather than
+ * derived on paper: sampling the real blackMetal bezel gives white at 0°, black at 45°/180°/315°
+ * and grey at 115°/235°, which is exactly what this returns.
+ */
+function conicalColorAt(fractions: number[], colors: string[], deg: number): string {
+  const f = clamp(1 - (((deg % 360) + 360) % 360) / 360, 0, 1);
+  for (let i = 0; i < fractions.length - 1; i++) {
+    if (f >= fractions[i] && f <= fractions[i + 1]) {
+      const span = fractions[i + 1] - fractions[i];
+      return mixHex(colors[i], colors[i + 1], span === 0 ? 0 : (f - fractions[i]) / span);
+    }
+  }
+  return colors[colors.length - 1];
+}
+
+/**
+ * SVG has no conical gradient, so a brushed finish is drawn as a ring of wedges, each carrying a
+ * linear gradient between the colours of its own two edges. The sweep is linear in angle within a
+ * segment, so matching both edges makes each wedge accurate to the width of the arc it spans; 24 of
+ * them is indistinguishable from the real thing and costs a fraction of the elements a per-degree
+ * fan would. Only a brushed finish emits these at all.
+ */
+const CONIC_WEDGES = 24;
+function conicalWedges(fractions: number[], colors: string[]): IFrameWedge[] {
+  const rMid = (CONIC_INNER_R + CONIC_OUTER_R) / 2;
+  const wedges: IFrameWedge[] = [];
+  for (let i = 0; i < CONIC_WEDGES; i++) {
+    const d0 = (i * 360) / CONIC_WEDGES;
+    const d1 = ((i + 1) * 360) / CONIC_WEDGES;
+    const [x1, y1] = polar(rMid, d0);
+    const [x2, y2] = polar(rMid, d1);
+    wedges.push({
+      d: bandPath(CONIC_INNER_R, CONIC_OUTER_R, d0, d1),
+      x1, y1, x2, y2,
+      c0: conicalColorAt(fractions, colors, d0),
+      c1: conicalColorAt(fractions, colors, d1)
+    });
+  }
+  return wedges;
+}
+
+/**
+ * The face's inner shadow and its side vignette, both from drawBackground.js. Together they are what
+ * stops the face reading as flat paint under the glass.
+ */
+const FACE_SHADOW_STOPS: IGradientStop[] = [
+  { o: '0', c: 'rgba(0,0,0,0)' }, { o: '0.7', c: 'rgba(0,0,0,0)' }, { o: '0.71', c: 'rgba(0,0,0,0)' },
+  { o: '0.86', c: 'rgba(0,0,0,0.03)' }, { o: '0.92', c: 'rgba(0,0,0,0.07)' },
+  { o: '0.97', c: 'rgba(0,0,0,0.15)' }, { o: '1', c: 'rgba(0,0,0,0.3)' }
+];
+const FACE_VIGNETTE_STOPS: IGradientStop[] = [
+  { o: '0', c: 'rgba(0,0,0,0.25)' }, { o: '0.5', c: 'rgba(0,0,0,0)' }, { o: '1', c: 'rgba(0,0,0,0.25)' }
+];
+
+/** The LCD inset, from createLcdBackgroundImage.js with the STANDARD colour set. */
+const LCD_BEZEL_STOPS: IGradientStop[] = [
+  { o: '0', c: '#4C4C4C' }, { o: '0.08', c: '#666666' }, { o: '0.92', c: '#666666' }, { o: '1', c: '#E6E6E6' }
+];
+const LCD_FACE_STOPS: IGradientStop[] = [
+  { o: '0', c: 'rgb(131,133,119)' }, { o: '0.03', c: 'rgb(176,183,167)' }, { o: '0.49', c: 'rgb(165,174,153)' },
+  { o: '0.5', c: 'rgb(166,175,156)' }, { o: '1', c: 'rgb(175,184,165)' }
+];
 
 @Component({
   selector: 'widget-sea-horizon',
@@ -297,13 +452,18 @@ export class WidgetSeaHorizonComponent {
   protected readonly ladderRungs = LADDER_RUNGS;
   protected readonly ladderLabels = LADDER_LABELS;
   protected readonly pointerPath = POINTER_PATH;
-  protected readonly glass = GLASS_ELLIPSE;
+  protected readonly glassPath = GLASS_PATH;
+  protected readonly glassGrad = GLASS_GRAD;
   protected readonly lcdHeel = LCD_HEEL;
   protected readonly lcdTrim = LCD_TRIM;
+  protected readonly lcdBezelStops = LCD_BEZEL_STOPS;
+  protected readonly lcdFaceStops = LCD_FACE_STOPS;
+  protected readonly faceShadowStops = FACE_SHADOW_STOPS;
+  protected readonly faceVignetteStops = FACE_VIGNETTE_STOPS;
   protected readonly frameR = FRAME_R;
-  protected readonly bevelR = BEVEL_R;
-  protected readonly gapR = GAP_R;
+  protected readonly frameInnerR = FRAME_INNER_R;
   protected readonly faceR = FACE_R;
+  protected readonly faceShadowR = FACE_SHADOW_R;
   protected readonly winR = WIN_R;
   protected readonly cx = CX;
   protected readonly cy = CY;
@@ -313,9 +473,12 @@ export class WidgetSeaHorizonComponent {
   protected readonly frameVisible = computed(() => this.runtime.options()?.gauge?.noFrameVisible ?? false);
 
   /** With the bezel hidden the dial grows into the space the bezel would have occupied. */
-  protected readonly dialTransform = computed(() =>
-    this.frameVisible() ? null : `translate(${CX} ${CY}) scale(${NO_FRAME_SCALE}) translate(${-CX} ${-CY})`
-  );
+  protected readonly dialTransform = computed(() => {
+    // The dial is drawn against DIAL_R and scaled onto whatever it has to fill: the steelseries face
+    // when the case is on, the whole tile when it is off.
+    const scale = (this.frameVisible() ? FACE_R : FRAME_R) / DIAL_R;
+    return `translate(${CX} ${CY}) scale(${scale.toFixed(4)}) translate(${-CX} ${-CY})`;
+  });
 
   protected readonly cautionAngle = computed(() => {
     const raw = this.runtime.options()?.gauge?.heelCautionAngle;
@@ -357,9 +520,32 @@ export class WidgetSeaHorizonComponent {
     })
   );
 
-  protected readonly frameStops = computed<IGradientStop[]>(() => {
+  /** The finish the stored `gauge.faceColor` selects, falling back to the default it ships with. */
+  private readonly frameDesign = computed<IFrameDesign>(() => {
     const key = this.runtime.options()?.gauge?.faceColor ?? DEFAULT_FRAME_DESIGN;
     return FRAME_DESIGNS[key] ?? FRAME_DESIGNS[DEFAULT_FRAME_DESIGN];
+  });
+
+  protected readonly frameGradients = computed(() =>
+    this.frameDesign().gradients.map((g, i) => ({ ...g, id: `skh-fg${i}-${this.id()}` }))
+  );
+
+  /** Filled circles making up the finish, innermost last, with gradient references resolved. */
+  protected readonly frameLayers = computed(() => {
+    const grads = this.frameGradients();
+    return this.frameDesign().layers.map(l => ({
+      r: l.r,
+      fill: l.grad === undefined ? (l.fill ?? 'none') : `url(#${grads[l.grad].id})`
+    }));
+  });
+
+  /** Empty for every finish but the three brushed ones. */
+  protected readonly frameWedges = computed(() => {
+    const conical = this.frameDesign().conical;
+    if (!conical) return [];
+    const suffix = this.id();
+    return conicalWedges(conical.fractions, conical.colors)
+      .map((w, i) => ({ ...w, id: `skh-wg${i}-${suffix}` }));
   });
 
   // ---- animated transforms -------------------------------------------------
@@ -407,13 +593,13 @@ export class WidgetSeaHorizonComponent {
   protected readonly ids = computed(() => {
     const suffix = this.id();
     return {
-      frame: `skh-frame-${suffix}`,
-      bevel: `skh-bevel-${suffix}`,
-      face: `skh-face-${suffix}`,
       sky: `skh-sky-${suffix}`,
       sea: `skh-sea-${suffix}`,
       glass: `skh-glass-${suffix}`,
-      lcd: `skh-lcd-${suffix}`,
+      shadow: `skh-shadow-${suffix}`,
+      vignette: `skh-vignette-${suffix}`,
+      lcdBezel: `skh-lcdb-${suffix}`,
+      lcdFace: `skh-lcdf-${suffix}`,
       window: `skh-window-${suffix}`
     };
   });
@@ -421,9 +607,9 @@ export class WidgetSeaHorizonComponent {
   protected readonly url = computed(() => {
     const r = this.ids();
     return {
-      frame: `url(#${r.frame})`, bevel: `url(#${r.bevel})`, face: `url(#${r.face})`,
       sky: `url(#${r.sky})`, sea: `url(#${r.sea})`, glass: `url(#${r.glass})`,
-      lcd: `url(#${r.lcd})`, window: `url(#${r.window})`
+      shadow: `url(#${r.shadow})`, vignette: `url(#${r.vignette})`,
+      lcdBezel: `url(#${r.lcdBezel})`, lcdFace: `url(#${r.lcdFace})`, window: `url(#${r.window})`
     };
   });
 
