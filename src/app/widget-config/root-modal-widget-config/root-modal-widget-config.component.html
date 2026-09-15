@@ -683,7 +683,7 @@
                 </ng-container>
               }
               <!-- Steelgauge -->
-              @if (widgetConfig?.gauge?.type === "steel" || widgetConfig?.gauge?.type === 'steelCompass' || widgetConfig?.gauge?.type === 'horizon') {
+              @if (widgetConfig?.gauge?.type === "steel" || widgetConfig?.gauge?.type === 'horizon') {
                 @if (widgetConfig?.gauge?.type !== 'horizon') {
                   <mat-form-field formGroupName="gauge">
                     <mat-label>Background Style</mat-label>
@@ -833,18 +833,22 @@
               formControlName="rotateFace"
               name="rotateFace"
             >
-              <mat-option [value]="true">Rotating card under a fixed pointer</mat-option>
+              <mat-option [value]="true">Rotating card under a fixed index</mat-option>
               <mat-option [value]="false">Fixed card, pointer swings to heading</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field class="options-grid-span2">
+            <mat-label>Finish</mat-label>
+            <mat-select placeholder="Select finish..." formControlName="finish" name="finish">
+              <mat-option value="anthracite">Black metal &amp; anthracite</mat-option>
+              <mat-option value="stainless">Brushed stainless</mat-option>
+              <mat-option value="carbon">Carbon blackout</mat-option>
+              <mat-option value="night">Night helm (red lit)</mat-option>
             </mat-select>
           </mat-form-field>
           <p>
             <mat-checkbox formControlName="degreeScale" name="degreeScale">
-              Show degree scale
-            </mat-checkbox>
-          </p>
-          <p>
-            <mat-checkbox formControlName="roseVisible" name="roseVisible">
-              Show compass rose
+              Print the degree scale on the card
             </mat-checkbox>
           </p>
         </div>

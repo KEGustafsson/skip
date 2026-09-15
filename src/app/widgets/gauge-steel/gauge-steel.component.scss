@@ -1,20 +1,5 @@
-// The canvas box contract: a 10px pad, then a square of side min(width, height) centred in what
-// is left. Consumers that overlay the dial (the steel compass draws its LCD over the canvas) size
-// against exactly this box, so it has to hold whether or not any other steel widget is on the page
-// — which is why it lives here, scoped to the template that owns the canvas, and not in a
-// consumer's `::ng-deep` that vanishes with that consumer's last instance.
-.wrapper {
-  display: block;
-  position: relative;
-  width: 100%;
+.sgWrapper {
   height: 100%;
-  padding: 10px;
-
-  > canvas {
-    display: block;
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-  }
+  width: 100%;
+  text-align: center;
 }

@@ -245,13 +245,10 @@ describe('ModalWidgetComponent steel compass gauge controls', () => {
 
     const gauge = component.formMaster.get('gauge') as UntypedFormGroup;
     expect(gauge).toBeTruthy();
-    // The three the compass Settings tab binds, plus the two it shares with the Classic Steel
-    // display tab.
+    // Every key the compass Settings tab binds by name.
     expect(gauge.get('rotateFace')?.value).toBe(true);
     expect(gauge.get('degreeScale')?.value).toBe(true);
-    expect(gauge.get('roseVisible')?.value).toBe(false);
-    expect(gauge.get('backgroundColor')).toBeTruthy();
-    expect(gauge.get('faceColor')).toBeTruthy();
+    expect(gauge.get('finish')?.value).toBe('anthracite');
   });
 });
 

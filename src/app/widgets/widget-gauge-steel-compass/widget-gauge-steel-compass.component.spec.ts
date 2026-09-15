@@ -1,18 +1,16 @@
 import { WritableSignal, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { WidgetSteelCompassComponent, toCompassDegrees } from './widget-gauge-steel-compass.component';
+import { WidgetSteelCompassComponent, toCompassDegrees, shortestTurn, COMPASS_FINISHES } from './widget-gauge-steel-compass.component';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
 import { WidgetStreamsDirective } from '../../core/directives/widget-streams.directive';
-import { UnitsService } from '../../core/services/units.service';
 import { IPathUpdate } from '../../core/services/data.service';
 import { IWidgetSvcConfig, IPathArray } from '../../core/interfaces/widgets-interface';
 
 /**
- * The card itself is drawn by steelseries, which cannot acquire a 2D context under jsdom — so these
- * assert the decisions this component actually makes: what the LCD reads, what the card is fed, and
- * what happens to a stale reading when the path changes. Both host directives are faked; the child
- * gauge's UnitsService is a non-root service and has to be provided here.
+ * The card is this component's own SVG, so these assert both the decisions behind the reading (what
+ * the LCD says, what happens to a stale one) and the geometry the template renders from. Both host
+ * directives are faked.
  */
 describe('WidgetSteelCompassComponent', () => {
   let fixture: ComponentFixture<WidgetSteelCompassComponent>;
@@ -25,6 +23,11 @@ describe('WidgetSteelCompassComponent', () => {
     headingText: () => string;
     unitLabel: () => string;
     displayName: () => string;
+    cardRotation: () => number;
+    pointerRotation: () => number;
+    cardTurns: () => boolean;
+    cardLabels: () => { text: string; fill: string }[];
+    finish: () => { index: string };
   }
 
   const makeConfig = (path: string | null = 'self.navigation.headingMagnetic'): IWidgetSvcConfig => {
@@ -44,17 +47,11 @@ describe('WidgetSteelCompassComponent', () => {
         capturedNext = next;
       }
     };
-    const unitsFake = {
-      getUnitDisplaySymbol: (measure: string | null | undefined): string => measure ?? '',
-      convertToUnit: (_unit: string, value: number): number => value
-    };
-
     await TestBed.configureTestingModule({
       imports: [WidgetSteelCompassComponent],
       providers: [
         { provide: WidgetRuntimeDirective, useValue: { options } },
-        { provide: WidgetStreamsDirective, useValue: streamsFake },
-        { provide: UnitsService, useValue: unitsFake }
+        { provide: WidgetStreamsDirective, useValue: streamsFake }
       ]
     }).compileComponents();
 
@@ -131,13 +128,62 @@ describe('WidgetSteelCompassComponent', () => {
     expect(internals.unitLabel()).toBe('°');
   });
 
+  it('turns the card against the heading, so the reading sits under the index', () => {
+    capturedNext?.(update(87));
+    // The card carries 087 to the top by rotating 87 degrees anticlockwise.
+    expect(internals.cardRotation()).toBe(-87);
+    expect(internals.cardTurns()).toBe(true);
+  });
+
+  it('crosses north the short way instead of unwinding through south', () => {
+    capturedNext?.(update(350));
+    const before = internals.cardRotation();
+    capturedNext?.(update(10));
+
+    // A boat turning 350 -> 010 has swung 20 degrees to starboard, so the card turns 20 the other
+    // way. Feeding the raw values to a CSS rotation would have unwound 340 degrees through south.
+    expect(internals.cardRotation() - before).toBe(-20);
+  });
+
+  it('parks the card and swings the pointer when the card is configured fixed', () => {
+    options.set({ ...makeConfig(), gauge: { ...WidgetSteelCompassComponent.DEFAULT_CONFIG.gauge, type: 'steelCompass', rotateFace: false } });
+    fixture.detectChanges();
+    capturedNext?.(update(87));
+
+    expect(internals.cardTurns()).toBe(false);
+    expect(internals.cardRotation()).toBe(0);
+    expect(internals.pointerRotation()).toBe(87);
+  });
+
+  it('prints north in the index colour so the card reads at a glance', () => {
+    const north = internals.cardLabels().find(l => l.text === 'N');
+    expect(north?.fill).toBe(internals.finish().index);
+  });
+
+  it('prints whole bearings, and drops them when the degree scale is off', () => {
+    expect(internals.cardLabels().map(l => l.text)).toContain('30');
+    expect(internals.cardLabels().map(l => l.text)).toContain('330');
+
+    options.set({ ...makeConfig(), gauge: { ...WidgetSteelCompassComponent.DEFAULT_CONFIG.gauge, type: 'steelCompass', degreeScale: false } });
+    fixture.detectChanges();
+
+    const texts = internals.cardLabels().map(l => l.text);
+    expect(texts).not.toContain('30');
+    // The cardinals and intercardinals stay: they are what makes it a compass.
+    expect(texts).toEqual(expect.arrayContaining(['N', 'E', 'S', 'W', 'NE', 'SE', 'SW', 'NW']));
+  });
+
+  it('falls back to the default finish when a config names one that no longer exists', () => {
+    options.set({ ...makeConfig(), gauge: { type: 'steelCompass', finish: 'brass-plated-unicorn' } });
+    fixture.detectChanges();
+    expect(internals.finish()).toBe(COMPASS_FINISHES['anthracite']);
+  });
+
   it('defaults to a rotating card fed degrees off a radian path', () => {
     const cfg = WidgetSteelCompassComponent.DEFAULT_CONFIG;
     const gaugePath = (cfg.paths as IPathArray)['gaugePath'];
-    // subType drives which steelseries class the shared gauge builds; the rest is what makes the
-    // card show the heading in degrees at the top of the dial.
-    expect(cfg.gauge?.subType).toBe('compass');
     expect(cfg.gauge?.rotateFace).toBe(true);
+    expect(cfg.gauge?.finish).toBe('anthracite');
     expect(gaugePath.pathSkUnitsFilter).toBe('rad');
     expect(gaugePath.convertUnitTo).toBe('deg');
     expect(gaugePath.suppressBootstrapNull).toBe(true);
@@ -157,5 +203,21 @@ describe('toCompassDegrees', () => {
   it('leaves a heading already on the card alone', () => {
     expect(toCompassDegrees(0)).toBe(0);
     expect(toCompassDegrees(359.5)).toBe(359.5);
+  });
+});
+
+describe('shortestTurn', () => {
+  it('takes the short way across north in both directions', () => {
+    expect(shortestTurn(350, 10)).toBe(20);
+    expect(shortestTurn(10, 350)).toBe(-20);
+  });
+
+  it('keeps an ordinary turn as it is', () => {
+    expect(shortestTurn(0, 90)).toBe(90);
+    expect(shortestTurn(90, 0)).toBe(-90);
+  });
+
+  it('resolves the half turn consistently rather than oscillating', () => {
+    expect(Math.abs(shortestTurn(0, 180))).toBe(180);
   });
 });
