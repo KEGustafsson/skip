@@ -627,25 +627,39 @@ describe('WidgetSeaHorizonComponent texture scale', () => {
     TestBed.resetTestingModule();
     measure = null;
     class CapturingResizeObserver {
+      /** Hand the spec a way to deliver a measurement, in place of a layout jsdom never performs. */
       constructor(callback: ResizeObserverCallback) {
         measure = (width, height) =>
           callback([{ contentRect: { width, height } } as ResizeObserverEntry], this as unknown as ResizeObserver);
       }
-      public observe(): void { /* the spec drives the callback itself */ }
-      public unobserve(): void { /* unused */ }
-      public disconnect(): void { /* unused */ }
+      /** The spec drives the callback itself, so there is nothing to watch. */
+      public observe(): void { /* no-op */ }
+      /** Never called: the spec observes nothing. */
+      public unobserve(): void { /* no-op */ }
+      /** Called on teardown; the captured callback goes out of scope with the spec. */
+      public disconnect(): void { /* no-op */ }
     }
     globalThis.ResizeObserver = CapturingResizeObserver as unknown as typeof ResizeObserver;
   });
 
   afterEach(() => { globalThis.ResizeObserver = originalResizeObserver; });
 
+  /**
+   * Mount the widget, tell it what size it was painted at, and hand back readers for the two
+   * attributes that carry the answer. They read the rendered SVG rather than the computeds behind
+   * it: a computed that is right but no longer bound to the template paints the wrong dial.
+   */
   function paintedAt(width: number, height: number, gauge: GaugeOverrides = {}) {
     TestBed.resetTestingModule();
     const h = mount(baseConfig({ noFrameVisible: true, backgroundColor: 'carbon', ...gauge }));
     measure?.(width, height);
     h.fixture.detectChanges();
-    return h.component;
+    const svg = h.fixture.nativeElement as HTMLElement;
+    return {
+      patternTransform: () => svg.querySelector('pattern')?.getAttribute('patternTransform') ?? null,
+      tileWidth: () => Number(svg.querySelector('pattern')?.getAttribute('width') ?? NaN),
+      scribeStrokeWidth: () => svg.querySelector('g[fill="none"][stroke-width]')?.getAttribute('stroke-width') ?? null
+    };
   }
 
   /**
@@ -656,36 +670,37 @@ describe('WidgetSeaHorizonComponent texture scale', () => {
    */
   it('keeps a texture tile the size steelseries draws it, whatever the widget is painted at', () => {
     for (const painted of [150, 300, 380, 600]) {
-      const c = paintedAt(painted, painted, { noFrameVisible: true });
-      const scale = Number(/scale\(([\d.]+)\)/.exec(c.texturePatternTransform())?.[1]);
-      const tileUnits = (c.backgroundTexture()?.size ?? 0) * scale;
-      expect(tileUnits * (painted / 300)).toBeCloseTo(12, 3);
+      const dial = paintedAt(painted, painted);
+      const scale = Number(/scale\(([\d.]+)\)/.exec(dial.patternTransform() ?? '')?.[1]);
+      expect(dial.tileWidth() * scale * (painted / 300)).toBeCloseTo(12, 3);
     }
   });
 
   // xMidYMid meet paints into the largest square that fits, so an oblong tile is sized by its
   // shorter side; taking the width would shrink the weave on a wide, short tile.
   it('measures the square the instrument is actually painted into', () => {
-    expect(paintedAt(600, 200).texturePatternTransform()).toBe('scale(1.50000)');
-    expect(paintedAt(200, 600).texturePatternTransform()).toBe('scale(1.50000)');
+    expect(paintedAt(600, 200).patternTransform()).toBe('scale(1.50000)');
+    expect(paintedAt(200, 600).patternTransform()).toBe('scale(1.50000)');
   });
 
   // With the case hidden the face is painted inside a group that scales it up to the whole tile,
   // which would carry the tile with it.
   it('divides out the scale the frameless face is drawn under', () => {
-    expect(paintedAt(300, 300, { noFrameVisible: true }).texturePatternTransform()).toBe('scale(1.00000)');
-    expect(paintedAt(300, 300, { noFrameVisible: false }).texturePatternTransform()).toBe('scale(0.83000)');
+    expect(paintedAt(300, 300, { noFrameVisible: true }).patternTransform()).toBe('scale(1.00000)');
+    expect(paintedAt(300, 300, { noFrameVisible: false }).patternTransform()).toBe('scale(0.83000)');
   });
 
   it('falls back to the authored size when nothing ever measures the widget', () => {
     TestBed.resetTestingModule();
-    const c = mount(baseConfig({ noFrameVisible: true, backgroundColor: 'carbon' })).component;
-    expect(c.texturePatternTransform()).toBe('scale(1.00000)');
+    const fixture = mount(baseConfig({ noFrameVisible: true, backgroundColor: 'carbon' })).fixture;
+    const pattern = (fixture.nativeElement as HTMLElement).querySelector('pattern');
+    expect(pattern?.getAttribute('patternTransform')).toBe('scale(1.00000)');
   });
 
   // steelseries scribes its turnings with a half-pixel stroke, so this follows the painted size too.
   it('scribes the turnings with a half-pixel stroke', () => {
-    expect(paintedAt(600, 600, { noFrameVisible: true, backgroundColor: 'turned' }).scribeStrokeWidth()).toBe('0.2500');
-    expect(paintedAt(150, 150, { noFrameVisible: true, backgroundColor: 'turned' }).scribeStrokeWidth()).toBe('1.0000');
+    const turned = { noFrameVisible: true, backgroundColor: 'turned' };
+    expect(paintedAt(600, 600, turned).scribeStrokeWidth()).toBe('0.2500');
+    expect(paintedAt(150, 150, turned).scribeStrokeWidth()).toBe('1.0000');
   });
 });
