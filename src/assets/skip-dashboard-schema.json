@@ -1445,6 +1445,66 @@
     {
       "bindingKind": "paths-record",
       "category": "Gauge",
+      "componentClassName": "WidgetSteelCompassComponent",
+      "defaultConfig": {
+        "dataTimeout": 5,
+        "displayName": "Heading",
+        "enableTimeout": false,
+        "filterSelfPaths": true,
+        "gauge": {
+          "backgroundColor": "carbon",
+          "degreeScale": true,
+          "faceColor": "blackMetal",
+          "roseVisible": false,
+          "rotateFace": true,
+          "subType": "compass",
+          "type": "steelCompass"
+        },
+        "paths": {
+          "gaugePath": {
+            "convertUnitTo": "deg",
+            "description": "Heading",
+            "isPathConfigurable": true,
+            "path": null,
+            "pathSkUnitsFilter": "rad",
+            "pathType": "number",
+            "showConvertUnitTo": false,
+            "showPathSkUnitsFilter": false,
+            "source": null,
+            "suppressBootstrapNull": true
+          }
+        },
+        "supportAutomaticHistoricalSeries": true,
+        "updateInterval": 500
+      },
+      "defaultHeight": 6,
+      "defaultWidth": 4,
+      "description": "A classic steel binnacle compass: the card turns under a fixed pointer, with the heading shown on an LCD window. Pairs with the Classic Steel gauges.",
+      "icon": "steelCompassGauge",
+      "minHeight": 2,
+      "minWidth": 1,
+      "name": "Steel Compass",
+      "pathSlots": [
+        {
+          "defaultConvertUnitTo": "deg",
+          "defaultPath": null,
+          "description": "Heading",
+          "expectedSkUnit": "rad",
+          "hideFromConfig": false,
+          "isPathConfigurable": true,
+          "pathOptions": null,
+          "pathRequired": false,
+          "pathType": "number",
+          "slot": "gaugePath",
+          "source": null
+        }
+      ],
+      "requiredPlugins": [],
+      "selector": "widget-gauge-steel-compass"
+    },
+    {
+      "bindingKind": "paths-record",
+      "category": "Gauge",
       "componentClassName": "WidgetHeelGaugeComponent",
       "defaultConfig": {
         "color": "contrast",

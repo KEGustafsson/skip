@@ -83,6 +83,12 @@ export class GaugeSteelComponent implements OnInit, OnChanges, OnDestroy {
   readonly frameColor = input<string>();
   readonly minValue = input<number>();
   readonly maxValue = input<number>();
+  /** Compass only: rotate the card under a fixed pointer instead of swinging the pointer. */
+  readonly rotateFace = input<boolean>();
+  /** Compass only: print the degree scale (010, 020, …) alongside the cardinal letters. */
+  readonly degreeScale = input<boolean>();
+  /** Compass only: draw the ornamental rose in the middle of the card. */
+  readonly roseVisible = input<boolean>();
   readonly decimals = input<number>();
   readonly zones = input<ISkZone[]>();
   readonly title = input<string>();
@@ -120,6 +126,15 @@ export class GaugeSteelComponent implements OnInit, OnChanges, OnDestroy {
     // Radial Arc size
     if (this.subType() == 'radial') {
       this.gaugeOptions['gaugeType'] = this.setGaugeType(this.radialSize());
+    }
+
+    // Compass card. The library's Compass reads none of the scale, LCD or label keys above — it is
+    // a fixed 0-360 dial with no readout — so the widget draws its own LCD over the canvas.
+    if (this.subType() == 'compass') {
+      this.gaugeOptions['rotateFace'] = this.rotateFace() ?? true;
+      this.gaugeOptions['degreeScale'] = this.degreeScale() ?? true;
+      this.gaugeOptions['roseVisible'] = this.roseVisible() ?? false;
+      this.gaugeOptions['pointSymbolsVisible'] = true;
     }
 
     // Zones
@@ -256,6 +271,8 @@ export class GaugeSteelComponent implements OnInit, OnChanges, OnDestroy {
     const subType = this.subType();
     if (subType === 'radial') {
       this.gauge = new steelseries.Radial(id, this.gaugeOptions);
+    } else if (subType === 'compass') {
+      this.gauge = new steelseries.Compass(id, this.gaugeOptions);
     } else if (subType === 'linear') {
       if (this.barGauge()) {
         this.gauge = new steelseries.LinearBargraph(id, this.gaugeOptions);
@@ -287,12 +304,13 @@ export class GaugeSteelComponent implements OnInit, OnChanges, OnDestroy {
   private applyGeometry(): string {
     const rect = this.lastRect;
     if (!rect) return this.lastSizeSignature;
-    if (this.subType() === 'radial') {
+    const subType = this.subType();
+    if (subType === 'radial' || subType === 'compass') {
       const size = Math.floor(Math.min(rect.height, rect.width));
       delete this.gaugeOptions['width'];
       delete this.gaugeOptions['height'];
       this.gaugeOptions['size'] = size;
-      return 'radial:' + size;
+      return `${subType}:${size}`;
     }
     const w = Math.floor(rect.width);
     const h = Math.floor(rect.height);
@@ -343,10 +361,18 @@ export class GaugeSteelComponent implements OnInit, OnChanges, OnDestroy {
       this.startGauge(true);
       return;
     }
-    if (changes.value && !changes.value.firstChange) {
+    // A widget that can go back to having no reading (the compass clears on a re-point) sends null
+    // here. The library has no concept of "no value": it coerces null to 0, which on a compass is a
+    // card swinging round to due north and on a radial a needle dropping to the scale minimum —
+    // both indistinguishable from a real measurement. Hold the last frame instead and let the
+    // widget say it is stale; every widget feeding this gauge draws its own no-data state.
+    if (changes.value && !changes.value.firstChange && changes.value.currentValue != null) {
         this.gauge.setValueAnimated(changes.value.currentValue);
     }
-    if (changes.title) {
+    // Guarded by capability rather than by subType: the Compass class carries no title, and calling
+    // the missing setter would throw out of ngOnChanges on a rename — killing the value update in
+    // the same batch. The other two live setters below exist on every class we build.
+    if (changes.title && typeof this.gauge.setTitleString === 'function') {
       this.gauge.setTitleString(changes.title.currentValue);
     }
     if(changes.backgroundColor) {
