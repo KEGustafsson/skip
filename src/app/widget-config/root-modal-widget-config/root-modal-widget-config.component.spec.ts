@@ -247,7 +247,9 @@ describe('ModalWidgetComponent steel compass gauge controls', () => {
     expect(gauge).toBeTruthy();
     // Every key the compass Settings tab binds by name.
     expect(gauge.get('degreeScale')?.value).toBe(true);
-    expect(gauge.get('finish')?.value).toBe('anthracite');
+    // The Classic Steel material keys, bound by the pickers the two widgets share.
+    expect(gauge.get('backgroundColor')?.value).toBe('carbon');
+    expect(gauge.get('faceColor')?.value).toBe('anthracite');
   });
 });
 

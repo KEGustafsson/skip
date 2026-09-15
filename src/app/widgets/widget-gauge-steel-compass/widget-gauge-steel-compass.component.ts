@@ -1,69 +1,76 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { IWidgetSvcConfig } from '../../core/interfaces/widgets-interface';
+import { CanvasService } from '../../core/services/canvas.service';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
 import { WidgetStreamsDirective, widgetPathSignature, normalizeWidgetPath, WidgetRepointTracker } from '../../core/directives/widget-streams.directive';
 import { ITheme } from '../../core/services/app-service';
 
-/** Material pair the card is drawn in. Keys are what a stored config carries. */
-export interface ICompassFinish {
-  /** Seven stops around the bezel ring, light to dark, giving it its turned-metal look. */
-  bezel: readonly string[];
-  /** Three stops of the dial face, centre outwards. */
-  face: readonly string[];
-  tick: string;
-  tickMinor: string;
+/**
+ * The slice of the steelseries global this widget paints with. The library is loaded from
+ * index.html as a browser global, the same way the Classic Steel gauges reach it; typing it here
+ * rather than as `any` keeps the lint rule honest about what we actually call.
+ */
+interface ISteelseries {
+  drawFrame(ctx: CanvasRenderingContext2D, frameDesign: unknown, centerX: number, centerY: number, width: number, height: number): void;
+  drawBackground(ctx: CanvasRenderingContext2D, background: unknown, centerX: number, centerY: number, width: number, height: number): void;
+  drawForeground(ctx: CanvasRenderingContext2D, foregroundType: unknown, width: number, height: number, withCenterKnob: boolean): void;
+  // Every member is optional on purpose. The global is whatever happens to be on the page: the real
+  // library in the app, and in the unit tests the minimal stand-in gauge-steel installs at module
+  // load — which carries these names as plain strings, with no colour objects under them.
+  FrameDesign?: Record<string, unknown>;
+  BackgroundColor?: Record<string, { labelColor?: ISteelColor; symbolColor?: ISteelColor } | undefined>;
+  ForegroundType?: Record<string, unknown>;
+  LcdColor?: Record<string, { gradientStartColor?: string; gradientStopColor?: string; textColor?: string } | undefined>;
+  ColorDef?: Record<string, { medium?: ISteelColor } | undefined>;
+}
+interface ISteelColor { getRgbaColor(): string }
+
+/** The gauge property bag this widget reads, narrowed from the shared widget config. */
+type ICompassGauge = NonNullable<IWidgetSvcConfig['gauge']>;
+
+function steelseriesGlobal(): ISteelseries | null {
+  return (globalThis as { steelseries?: ISteelseries }).steelseries ?? null;
+}
+
+/** `brushedStainless` -> `BRUSHED_STAINLESS`: the config keys are the Classic Steel ones. */
+function toEnumKey(configKey: string): string {
+  return configKey.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+}
+
+/** Ink the card is printed in. Taken from the chosen background, so a light face gets dark type. */
+interface ICardInk {
   label: string;
-  dim: string;
-  /** The index at the top of the dial, and north on the card. */
+  symbol: string;
   index: string;
   lcdTop: string;
   lcdBottom: string;
   lcdInk: string;
-  glass: string;
 }
 
-export const COMPASS_FINISHES: Readonly<Record<string, ICompassFinish>> = {
-  anthracite: {
-    bezel: ['#E9EDEF', '#98A0A4', '#2B2F31', '#0A0C0D', '#4E5457', '#BAC1C5', '#17191B'],
-    face: ['#5C6265', '#34393B', '#14171A'],
-    tick: '#F2F5F6', tickMinor: '#9BA3A7', label: '#FFFFFF', dim: '#98A1A5',
-    index: '#D8232A',
-    lcdTop: '#CBD0B4', lcdBottom: '#ADB598', lcdInk: '#20261F',
-    glass: 'rgba(255,255,255,.085)'
-  },
-  stainless: {
-    bezel: ['#FBFCFC', '#C6CDD1', '#7C8489', '#454B4F', '#A9B1B5', '#EDF1F2', '#6B7276'],
-    face: ['#F0F2EE', '#D6DAD4', '#A8AEA9'],
-    tick: '#1A1F22', tickMinor: '#5D666B', label: '#11161A', dim: '#4B5559',
-    index: '#B01118',
-    lcdTop: '#B9C1A4', lcdBottom: '#9AA488', lcdInk: '#1B211A',
-    glass: 'rgba(255,255,255,.22)'
-  },
-  carbon: {
-    bezel: ['#7E868A', '#3B4145', '#15181A', '#000000', '#2E3438', '#767E82', '#0B0D0E'],
-    face: ['#22272A', '#14181A', '#050708'],
-    tick: '#E6EBED', tickMinor: '#79838A', label: '#FFFFFF', dim: '#8C969B',
-    index: '#E8353C',
-    lcdTop: '#8E9A7E', lcdBottom: '#727E63', lcdInk: '#14180F',
-    glass: 'rgba(255,255,255,.06)'
-  },
-  night: {
-    bezel: ['#6E7478', '#2E3437', '#101314', '#000000', '#272C2F', '#5F676B', '#0A0C0D'],
-    face: ['#241012', '#170A0C', '#080405'],
-    tick: '#FF6B66', tickMinor: '#9B3B3A', label: '#FF8A85', dim: '#A34744',
-    index: '#FF5A52',
-    lcdTop: '#4A1E1D', lcdBottom: '#341413', lcdInk: '#FF9A93',
-    glass: 'rgba(255,120,110,.06)'
-  }
+/**
+ * What the card looks like with no steelseries on the page — jsdom in the unit tests, and the
+ * moment before the global script has run. The dial still draws; only the case is missing.
+ */
+const FALLBACK_INK: ICardInk = {
+  label: '#FFFFFF',
+  symbol: 'rgb(180, 180, 180)',
+  index: '#D8232A',
+  lcdTop: 'rgb(131, 133, 119)',
+  lcdBottom: 'rgb(175, 184, 165)',
+  lcdInk: 'rgb(35, 42, 52)'
 };
 
 interface ICardTick { x1: number; y1: number; x2: number; y2: number; stroke: string; width: number }
 interface ICardLabel { x: number; y: number; text: string; size: number; weight: number; fill: string; rotate: string }
 
-/** Dial geometry, in the 500x500 viewBox every coordinate below is expressed in. */
+/**
+ * Dial geometry, in the 500x500 viewBox every coordinate below is expressed in. The face the
+ * library paints ends at 0.831775 of the image width — radius 208 here — so the card, its index and
+ * the readout all stay inside that.
+ */
 const CX = 250;
 const CY = 250;
-const R_CARD = 190;
+const R_CARD = 188;
 
 function point(radius: number, angleDeg: number): [number, number] {
   const t = (angleDeg - 90) * Math.PI / 180;
@@ -99,10 +106,12 @@ export function shortestTurn(from: number, to: number): number {
  * Steel compass: the card turns under a fixed index at the rim, the way a binnacle compass reads.
  * That is the only mode — there is no needle on this dial in any configuration.
  *
- * Drawn here rather than by the bundled steelseries library. That library's `Compass` can rotate its
- * card, but its index is always a full needle from the hub outwards — and a needle on a compass
- * reads as a magnetic needle pointing north, not as the lubber line you steer against. None of its
- * sixteen pointer types is a rim index and it rejects a transparent pointer, so the card is ours.
+ * The case is painted by steelseries' own `drawFrame` / `drawBackground` / `drawForeground`, the
+ * same code the Classic Steel gauges draw with, so the two match on a dashboard down to the
+ * material. Only the card is ours: the library's `Compass` draws its index as a full needle from
+ * the hub, and a needle on a compass reads as a magnetic needle pointing north rather than as the
+ * lubber line you steer against. None of its sixteen pointer types is a rim index, so the card,
+ * the index and the readout are SVG layered over the painted case.
  */
 @Component({
   selector: 'widget-gauge-steel-compass',
@@ -110,7 +119,7 @@ export function shortestTurn(from: number, to: number): number {
   styleUrl: './widget-gauge-steel-compass.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class WidgetSteelCompassComponent {
+export class WidgetSteelCompassComponent implements AfterViewInit, OnDestroy {
   // Functional Host2 inputs
   public id = input.required<string>();
   public type = input.required<string>();
@@ -119,6 +128,12 @@ export class WidgetSteelCompassComponent {
   // Host directives
   protected readonly runtime = inject(WidgetRuntimeDirective);
   private readonly streams = inject(WidgetStreamsDirective);
+  private readonly canvas = inject(CanvasService);
+
+  private readonly caseCanvas = viewChild.required<ElementRef<HTMLCanvasElement>>('caseCanvas');
+  private ctx: CanvasRenderingContext2D | null = null;
+  /** Last size the case was painted at, so a config change can repaint without a resize. */
+  private readonly caseSize = signal<{ width: number; height: number } | null>(null);
 
   public static readonly DEFAULT_CONFIG: IWidgetSvcConfig = {
     displayName: 'Heading',
@@ -141,7 +156,9 @@ export class WidgetSteelCompassComponent {
     gauge: {
       type: 'steelCompass',
       degreeScale: true,
-      finish: 'anthracite'
+      // The Classic Steel defaults, so a compass dropped beside one matches out of the box.
+      backgroundColor: 'carbon',
+      faceColor: 'anthracite'
     },
     updateInterval: 500,
     enableTimeout: false,
@@ -182,9 +199,25 @@ export class WidgetSteelCompassComponent {
     return '°';
   });
 
-  protected readonly finish = computed<ICompassFinish>(() => {
-    const key = this.runtime.options()?.gauge?.finish ?? 'anthracite';
-    return COMPASS_FINISHES[key] ?? COMPASS_FINISHES['anthracite'];
+  /**
+   * Card ink, read off the steelseries background the case is painted with: its own `labelColor`
+   * and `symbolColor` are what the library prints its scales in, so a white or beige face gets dark
+   * type without a second table to keep in step.
+   */
+  protected readonly ink = computed<ICardInk>(() => {
+    const steel = steelseriesGlobal();
+    if (!steel) return FALLBACK_INK;
+    const background = steel.BackgroundColor?.[toEnumKey(this.runtime.options()?.gauge?.backgroundColor ?? 'carbon')];
+    const lcd = steel.LcdColor?.['STANDARD'];
+    const red = steel.ColorDef?.['RED'];
+    return {
+      label: background?.labelColor?.getRgbaColor?.() ?? FALLBACK_INK.label,
+      symbol: background?.symbolColor?.getRgbaColor?.() ?? FALLBACK_INK.symbol,
+      index: red?.medium?.getRgbaColor?.() ?? FALLBACK_INK.index,
+      lcdTop: lcd?.gradientStartColor ?? FALLBACK_INK.lcdTop,
+      lcdBottom: lcd?.gradientStopColor ?? FALLBACK_INK.lcdBottom,
+      lcdInk: lcd?.textColor ?? FALLBACK_INK.lcdInk
+    };
   });
 
   /** Card rotation. Negative because the card turns against the heading to bring it under the index. */
@@ -193,16 +226,8 @@ export class WidgetSteelCompassComponent {
   /** Unique per instance: two compasses on one dashboard must not share gradient ids. */
   protected readonly gradientId = computed(() => `sc-${this.id()}`);
 
-  protected readonly bezelStops = computed(() =>
-    this.finish().bezel.map((color, i) => ({ color, offset: [0, 0.13, 0.33, 0.55, 0.74, 0.89, 1][i] }))
-  );
-
-  protected readonly faceStops = computed(() =>
-    this.finish().face.map((color, i) => ({ color, offset: [0, 0.56, 1][i] }))
-  );
-
   protected readonly cardTicks = computed<ICardTick[]>(() => {
-    const pal = this.finish();
+    const ink = this.ink();
     const ticks: ICardTick[] = [];
     for (let a = 0; a < 360; a += 5) {
       const major = a % 30 === 0;
@@ -212,7 +237,7 @@ export class WidgetSteelCompassComponent {
       const [x2, y2] = point(R_CARD, a);
       ticks.push({
         x1: round(x1), y1: round(y1), x2: round(x2), y2: round(y2),
-        stroke: major ? pal.tick : pal.tickMinor,
+        stroke: major ? ink.label : ink.symbol,
         width: major ? 5 : mid ? 3 : 2
       });
     }
@@ -220,7 +245,7 @@ export class WidgetSteelCompassComponent {
   });
 
   protected readonly cardLabels = computed<ICardLabel[]>(() => {
-    const pal = this.finish();
+    const ink = this.ink();
     const withDegrees = this.runtime.options()?.gauge?.degreeScale !== false;
     const cardinals: Record<number, string> = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
     const inter: Record<number, string> = { 45: 'NE', 135: 'SE', 225: 'SW', 315: 'NW' };
@@ -239,14 +264,14 @@ export class WidgetSteelCompassComponent {
     for (let a = 0; a < 360; a += 30) {
       const cardinal = cardinals[a];
       if (cardinal) {
-        push(R_CARD - 48, a, cardinal, 40, 700, a === 0 ? pal.index : pal.label);
+        push(R_CARD - 48, a, cardinal, 40, 700, a === 0 ? ink.index : ink.label);
       } else if (withDegrees) {
         // The whole bearing: 30, 60, 120 — not the tens shorthand a printed card uses.
-        push(R_CARD - 46, a, String(a), 26, 600, pal.label);
+        push(R_CARD - 46, a, String(a), 26, 600, ink.label);
       }
     }
     for (const angle of [45, 135, 225, 315]) {
-      push(R_CARD - 88, angle, inter[angle], 19, 600, pal.dim);
+      push(R_CARD - 88, angle, inter[angle], 19, 600, ink.symbol);
     }
     return labels;
   });
@@ -267,7 +292,55 @@ export class WidgetSteelCompassComponent {
     this.turned.update(current => current + shortestTurn(toCompassDegrees(current), value));
   }
 
+  ngAfterViewInit(): void {
+    const element = this.caseCanvas().nativeElement;
+    this.ctx = element.getContext('2d');
+    this.canvas.registerCanvas(element, {
+      autoRelease: true,
+      onResize: (width, height) => this.caseSize.set({ width, height })
+    });
+  }
+
+  ngOnDestroy(): void {
+    try {
+      this.canvas.unregisterCanvas(this.caseCanvas().nativeElement);
+    } catch { /* already gone */ }
+  }
+
+  /**
+   * Paint the case with the library's own painters, so it is the Classic Steel case rather than a
+   * drawing of one. Square and centred, matching how the SVG above it fits its viewBox, so the card
+   * lands inside the painted face at any tile shape.
+   */
+  private paintCase(size: { width: number; height: number } | null, gauge: ICompassGauge | null): void {
+    const steel = steelseriesGlobal();
+    const ctx = this.ctx;
+    if (!steel || !ctx || !size || size.width < 1 || size.height < 1) return;
+    const side = Math.min(size.width, size.height);
+
+    ctx.clearRect(0, 0, size.width, size.height);
+    const frame = steel.FrameDesign?.[toEnumKey(gauge?.faceColor ?? 'anthracite')];
+    const background = steel.BackgroundColor?.[toEnumKey(gauge?.backgroundColor ?? 'carbon')];
+    // A partial global (the unit tests' stand-in) has the names but not the painters.
+    if (!frame || !background || typeof steel.drawFrame !== 'function') return;
+
+    const centerX = size.width / 2;
+    const centerY = size.height / 2;
+    steel.drawFrame(ctx, frame, centerX, centerY, side, side);
+    steel.drawBackground(ctx, background, centerX, centerY, side, side);
+    // TYPE1 with no centre knob: the glass highlight, and nothing at the hub — the card has no
+    // needle for a knob to hold down.
+    steel.drawForeground(ctx, steel.ForegroundType?.['TYPE1'], side, side, false);
+  }
+
   constructor() {
+    // Repaint on a resize or a material change; both are rare, and the card above is untouched.
+    effect(() => {
+      const size = this.caseSize();
+      const gauge = this.runtime.options()?.gauge ?? null;
+      untracked(() => this.paintCase(size, gauge));
+    });
+
     effect(() => {
       const cfg = this.runtime.options();
       if (!cfg) return;

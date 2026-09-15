@@ -1,7 +1,7 @@
 import { WritableSignal, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { WidgetSteelCompassComponent, toCompassDegrees, shortestTurn, COMPASS_FINISHES } from './widget-gauge-steel-compass.component';
+import { WidgetSteelCompassComponent, toCompassDegrees, shortestTurn } from './widget-gauge-steel-compass.component';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
 import { WidgetStreamsDirective } from '../../core/directives/widget-streams.directive';
 import { IPathUpdate } from '../../core/services/data.service';
@@ -25,7 +25,7 @@ describe('WidgetSteelCompassComponent', () => {
     displayName: () => string;
     cardRotation: () => number;
     cardLabels: () => { text: string; fill: string }[];
-    finish: () => { index: string };
+    ink: () => { index: string; label: string };
   }
 
   const makeConfig = (path: string | null = 'self.navigation.headingMagnetic'): IWidgetSvcConfig => {
@@ -155,7 +155,9 @@ describe('WidgetSteelCompassComponent', () => {
 
   it('prints north in the index colour so the card reads at a glance', () => {
     const north = internals.cardLabels().find(l => l.text === 'N');
-    expect(north?.fill).toBe(internals.finish().index);
+    expect(north?.fill).toBe(internals.ink().index);
+    // Every other cardinal is in the label ink, so north is the only one that stands out.
+    expect(internals.cardLabels().find(l => l.text === 'S')?.fill).toBe(internals.ink().label);
   });
 
   it('prints whole bearings, and drops them when the degree scale is off', () => {
@@ -171,16 +173,21 @@ describe('WidgetSteelCompassComponent', () => {
     expect(texts).toEqual(expect.arrayContaining(['N', 'E', 'S', 'W', 'NE', 'SE', 'SW', 'NW']));
   });
 
-  it('falls back to the default finish when a config names one that no longer exists', () => {
-    options.set({ ...makeConfig(), gauge: { type: 'steelCompass', finish: 'brass-plated-unicorn' } });
+  it('still prints a readable card with no steelseries on the page', () => {
+    // The library is a browser global loaded from index.html; under jsdom it is absent. The case
+    // goes unpainted, but the card must not come out with undefined colours.
+    options.set({ ...makeConfig(), gauge: { type: 'steelCompass', backgroundColor: 'white', faceColor: 'chrome' } });
     fixture.detectChanges();
-    expect(internals.finish()).toBe(COMPASS_FINISHES['anthracite']);
+
+    expect(internals.ink().label).toBeTruthy();
+    expect(internals.cardLabels().every(l => !!l.fill)).toBe(true);
   });
 
   it('is fed degrees off a radian path', () => {
     const cfg = WidgetSteelCompassComponent.DEFAULT_CONFIG;
     const gaugePath = (cfg.paths as IPathArray)['gaugePath'];
-    expect(cfg.gauge?.finish).toBe('anthracite');
+    expect(cfg.gauge?.backgroundColor).toBe('carbon');
+    expect(cfg.gauge?.faceColor).toBe('anthracite');
     expect(gaugePath.pathSkUnitsFilter).toBe('rad');
     expect(gaugePath.convertUnitTo).toBe('deg');
     expect(gaugePath.suppressBootstrapNull).toBe(true);

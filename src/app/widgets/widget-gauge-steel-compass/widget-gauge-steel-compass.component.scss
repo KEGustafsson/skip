@@ -4,14 +4,21 @@
   height: 100%;
 }
 
-// One drawing at one viewBox, so every part of the dial keeps its place at any tile size or aspect
-// ratio — no second box to keep in step with a canvas.
+// Two layers on one box: the painted case underneath, the card drawn over it. Both fit the same
+// centred square, so every coordinate in the viewBox lands where it does on the painted face.
 .compass {
-  display: block;
+  position: relative;
   width: 100%;
   height: 100%;
-  padding: 10px;
-  box-sizing: border-box;
+}
+
+.case,
+.card-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .card {
