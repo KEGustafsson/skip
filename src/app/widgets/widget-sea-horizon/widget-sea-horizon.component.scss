@@ -1,0 +1,134 @@
+// The instrument is a physical object: brushed metal, glass and an LCD look the same whatever
+// theme the rest of the dashboard is in, exactly as the steelseries gauges do. Only the bezel
+// finish is configurable, through gauge.faceColor.
+:host {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.sea-horizon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-family: "Roboto", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.horizon-line {
+  stroke: #e6eef1;
+  stroke-width: 2.2;
+}
+
+.ladder line {
+  stroke: #e6eef1;
+}
+
+.ladder-labels text {
+  fill: #e6eef1;
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.window-rim {
+  fill: none;
+  stroke: #0a0c0d;
+  stroke-width: 3;
+  opacity: 0.9;
+}
+
+.bands path {
+  opacity: 0.8;
+}
+
+// Paired tick groups: a dark copy offset by a pixel under a bright one reads as engraving without
+// a filter, which would cost a raster pass on every frame on a Pi-class target.
+.ticks-shadow line {
+  stroke: #000;
+  stroke-opacity: 0.5;
+}
+
+.ticks line {
+  stroke: #9aa5a9;
+
+  &.major {
+    stroke: #e8ecee;
+  }
+}
+
+.numerals text {
+  fill: #e8ecee;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+  stroke: #0d1012;
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
+.limit-index line {
+  stroke: #d8352c;
+  stroke-width: 2.6;
+}
+
+.pointer-shadow {
+  fill: #000;
+  opacity: 0.45;
+}
+
+.pointer-face {
+  fill: #d8352c;
+  stroke: #7a1610;
+  stroke-width: 0.8;
+}
+
+// Deck bar, gunwale ticks and mast stub, in the orange Skip's steel gauges use for markers.
+.reference {
+  line {
+    stroke: #f08a1e;
+  }
+
+  circle {
+    fill: #f08a1e;
+  }
+}
+
+.no-data {
+  circle {
+    fill: #05090b;
+    opacity: 0.66;
+  }
+
+  text {
+    fill: #9aa5a9;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.6px;
+  }
+}
+
+.lcd {
+  .lcd-surround {
+    fill: #0b0d0e;
+    opacity: 0.85;
+  }
+
+  .lcd-sheen {
+    fill: #fff;
+    opacity: 0.16;
+  }
+
+  text {
+    fill: #1d2430;
+    font-weight: 700;
+  }
+}
+
+.glass-rim {
+  fill: none;
+  stroke: #000;
+  stroke-opacity: 0.45;
+  stroke-width: 2;
+}

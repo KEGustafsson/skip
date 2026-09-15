@@ -1,0 +1,185 @@
+<svg
+  class="sea-horizon"
+  viewBox="0 0 300 300"
+  preserveAspectRatio="xMidYMid meet"
+  role="img"
+  [attr.aria-label]="ariaLabel()"
+>
+  <defs>
+    <!-- Bezel: bright at the top, dark where the metal turns away, lifting again at the bottom -->
+    <linearGradient [attr.id]="ids().frame" x1="0" y1="0" x2="0" y2="1">
+      @for (s of frameStops(); track $index) {
+        <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+      }
+    </linearGradient>
+    <!-- Inner bevel runs the other way, so the two rings read as a chamfer -->
+    <linearGradient [attr.id]="ids().bevel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0C0E0F" />
+      <stop offset="0.35" stop-color="#2B3033" />
+      <stop offset="0.62" stop-color="#5A6165" />
+      <stop offset="1" stop-color="#B9BEC0" />
+    </linearGradient>
+    <radialGradient [attr.id]="ids().face" cx="0.5" cy="0.44" r="0.72">
+      <stop offset="0" stop-color="#4E565A" />
+      <stop offset="0.48" stop-color="#3A4145" />
+      <stop offset="0.8" stop-color="#252A2D" />
+      <stop offset="1" stop-color="#14181A" />
+    </radialGradient>
+    <linearGradient [attr.id]="ids().sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E5E78" />
+      <stop offset="1" stop-color="#53809A" />
+    </linearGradient>
+    <linearGradient [attr.id]="ids().sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#12414F" />
+      <stop offset="1" stop-color="#07222C" />
+    </linearGradient>
+    <linearGradient [attr.id]="ids().glass" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22" />
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0.05" />
+      <stop offset="0.7" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient [attr.id]="ids().lcd" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#AFB89C" />
+      <stop offset="0.5" stop-color="#C3CBB0" />
+      <stop offset="1" stop-color="#AFB89C" />
+    </linearGradient>
+    <clipPath [attr.id]="ids().window">
+      <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="winR" />
+    </clipPath>
+  </defs>
+
+  <!-- Case -->
+  @if (frameVisible()) {
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="frameR" [attr.fill]="url().frame" />
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="bevelR" [attr.fill]="url().bevel" />
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="gapR" fill="#0A0C0D" />
+  }
+
+  <g [attr.transform]="dialTransform()">
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceR" [attr.fill]="url().face" />
+
+    <!-- Horizon window. The world rotates against a boat-fixed dial. -->
+    <g [attr.clip-path]="url().window">
+      <g
+        class="world"
+        [attr.transform]="worldTransform()"
+        [style.transition]="ready() ? motionTransition() : 'none'"
+      >
+        <rect x="-340" y="-520" width="980" height="670" [attr.fill]="url().sky" />
+        <rect x="-340" [attr.y]="cy" width="980" height="660" [attr.fill]="url().sea" />
+        <line x1="-340" [attr.y1]="cy" x2="640" [attr.y2]="cy" class="horizon-line" />
+
+        <g class="ladder">
+          @for (rung of ladderRungs; track $index) {
+            <line
+              [attr.x1]="rung.x1"
+              [attr.y1]="rung.y"
+              [attr.x2]="rung.x2"
+              [attr.y2]="rung.y"
+              [attr.stroke-width]="rung.major ? 1.8 : 1.1"
+              [attr.opacity]="rung.major ? 0.95 : 0.5"
+            />
+          }
+        </g>
+        <g class="ladder-labels">
+          @for (label of ladderLabels; track $index) {
+            <text [attr.x]="label.x" [attr.y]="label.y" [attr.text-anchor]="label.anchor">{{ label.text }}</text>
+          }
+        </g>
+      </g>
+    </g>
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="winR" class="window-rim" />
+
+    <!-- Heel scale: nominal / caution / alarm, then ticks, numerals and the limit index -->
+    <g class="bands">
+      @for (band of heelBands(); track $index) {
+        <path [attr.d]="band.d" [attr.fill]="band.fill" />
+      }
+    </g>
+    <g class="ticks-shadow" transform="translate(0 1)">
+      @for (tick of heelTicks; track $index) {
+        <line
+          [attr.x1]="tick.x1"
+          [attr.y1]="tick.y1"
+          [attr.x2]="tick.x2"
+          [attr.y2]="tick.y2"
+          [attr.stroke-width]="tick.major ? 2.6 : 1.4"
+        />
+      }
+    </g>
+    <g class="ticks">
+      @for (tick of heelTicks; track $index) {
+        <line
+          [attr.x1]="tick.x1"
+          [attr.y1]="tick.y1"
+          [attr.x2]="tick.x2"
+          [attr.y2]="tick.y2"
+          [class.major]="tick.major"
+          [attr.stroke-width]="tick.major ? 2.4 : 1.2"
+        />
+      }
+    </g>
+    <g class="numerals">
+      @for (numeral of heelNumerals; track $index) {
+        <text [attr.x]="numeral.x" [attr.y]="numeral.y" [attr.transform]="numeral.transform">{{ numeral.text }}</text>
+      }
+    </g>
+    <g class="limit-index">
+      @for (limit of limitIndexes(); track $index) {
+        <line [attr.x1]="limit.x1" [attr.y1]="limit.y1" [attr.x2]="limit.x2" [attr.y2]="limit.y2" />
+      }
+    </g>
+
+    <!-- Rim pointer: reads the heel scale -->
+    <g
+      class="pointer"
+      [attr.transform]="pointerTransform()"
+      [style.transition]="ready() ? motionTransition() : 'none'"
+    >
+      <path [attr.d]="pointerPath" class="pointer-shadow" transform="translate(0 1.5)" />
+      <path [attr.d]="pointerPath" class="pointer-face" />
+    </g>
+
+    <!-- Fixed boat reference: a deck bar with a mast stub, not an aircraft -->
+    <g class="reference">
+      <line [attr.x1]="cx - 46" [attr.y1]="cy" [attr.x2]="cx - 18" [attr.y2]="cy" stroke-width="3.4" stroke-linecap="round" />
+      <line [attr.x1]="cx + 18" [attr.y1]="cy" [attr.x2]="cx + 46" [attr.y2]="cy" stroke-width="3.4" stroke-linecap="round" />
+      <line [attr.x1]="cx - 46" [attr.y1]="cy" [attr.x2]="cx - 46" [attr.y2]="cy + 8" stroke-width="3.4" />
+      <line [attr.x1]="cx + 46" [attr.y1]="cy" [attr.x2]="cx + 46" [attr.y2]="cy + 8" stroke-width="3.4" />
+      <line [attr.x1]="cx" [attr.y1]="cy - 15" [attr.x2]="cx" [attr.y2]="cy + 3" stroke-width="2.4" />
+      <circle [attr.cx]="cx" [attr.cy]="cy" r="3.2" />
+    </g>
+
+    @if (noData()) {
+      <g class="no-data">
+        <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="winR" />
+        <text [attr.x]="cx" [attr.y]="cy - 22" text-anchor="middle">NO DATA</text>
+      </g>
+    }
+
+    <!-- LCD insets -->
+    <g class="lcd">
+      <rect
+        [attr.x]="lcdHeel.x - 1.5" [attr.y]="lcdHeel.y - 1.5"
+        [attr.width]="lcdHeel.w + 3" [attr.height]="lcdHeel.h + 3" rx="2.5" class="lcd-surround"
+      />
+      <rect [attr.x]="lcdHeel.x" [attr.y]="lcdHeel.y" [attr.width]="lcdHeel.w" [attr.height]="lcdHeel.h" rx="1.5" [attr.fill]="url().lcd" />
+      <rect [attr.x]="lcdHeel.x" [attr.y]="lcdHeel.y" [attr.width]="lcdHeel.w" [attr.height]="lcdHeel.h * 0.42" rx="1.5" class="lcd-sheen" />
+      <text [attr.x]="cx" [attr.y]="lcdHeel.textY" [attr.font-size]="lcdHeel.size" text-anchor="middle">{{ heelText() }}</text>
+
+      <rect
+        [attr.x]="lcdTrim.x - 1.5" [attr.y]="lcdTrim.y - 1.5"
+        [attr.width]="lcdTrim.w + 3" [attr.height]="lcdTrim.h + 3" rx="2.5" class="lcd-surround"
+      />
+      <rect [attr.x]="lcdTrim.x" [attr.y]="lcdTrim.y" [attr.width]="lcdTrim.w" [attr.height]="lcdTrim.h" rx="1.5" [attr.fill]="url().lcd" />
+      <rect [attr.x]="lcdTrim.x" [attr.y]="lcdTrim.y" [attr.width]="lcdTrim.w" [attr.height]="lcdTrim.h * 0.42" rx="1.5" class="lcd-sheen" />
+      <text [attr.x]="cx" [attr.y]="lcdTrim.textY" [attr.font-size]="lcdTrim.size" text-anchor="middle">{{ trimText() }}</text>
+    </g>
+
+    <!-- Glass over everything -->
+    <g class="glass">
+      <ellipse [attr.cx]="glass.cx" [attr.cy]="glass.cy" [attr.rx]="glass.rx" [attr.ry]="glass.ry" [attr.fill]="url().glass" />
+      <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceR" class="glass-rim" />
+    </g>
+  </g>
+</svg>
