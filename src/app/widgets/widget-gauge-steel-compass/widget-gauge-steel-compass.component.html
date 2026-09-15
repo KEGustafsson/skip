@@ -19,12 +19,6 @@
       }
     </radialGradient>
 
-    <radialGradient [attr.id]="gradientId() + '-screw'" cx="34%" cy="28%" r="78%">
-      <stop offset="0" stop-color="#F4F6F7" />
-      <stop offset="0.5" stop-color="#AEB5B9" />
-      <stop offset="1" stop-color="#565C60" />
-    </radialGradient>
-
     <linearGradient [attr.id]="gradientId() + '-lcd'" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" [attr.stop-color]="finish().lcdTop" />
       <stop offset="1" [attr.stop-color]="finish().lcdBottom" />
@@ -84,12 +78,6 @@
   <path d="M 250 52 L 263 26 L 237 26 Z" [attr.fill]="finish().index" />
   <line x1="250" y1="50" x2="250" y2="74" [attr.stroke]="finish().index" stroke-width="4" />
 
-  <!-- Glass, then the two case screws on top of it. -->
+  <!-- Glass. -->
   <ellipse cx="205" cy="160" rx="172" ry="132" [attr.fill]="'url(#' + gradientId() + '-glass)'" />
-  @for (screw of screws(); track $index) {
-    <g>
-      <circle [attr.cx]="screw.x" [attr.cy]="screw.y" r="10" [attr.fill]="'url(#' + gradientId() + '-screw)'" stroke="rgba(0,0,0,.45)" />
-      <line [attr.x1]="screw.x - 6" [attr.y1]="screw.y" [attr.x2]="screw.x + 6" [attr.y2]="screw.y" stroke="rgba(0,0,0,.4)" stroke-width="2" />
-    </g>
-  }
 </svg>

@@ -201,12 +201,6 @@ export class WidgetSteelCompassComponent {
     this.finish().face.map((color, i) => ({ color, offset: [0, 0.56, 1][i] }))
   );
 
-  /** Two screws in the bezel band, where they cannot collide with anything printed on the card. */
-  protected readonly screws = computed(() => [219, 321].map(angle => {
-    const [x, y] = point(226, angle);
-    return { x: round(x), y: round(y) };
-  }));
-
   protected readonly cardTicks = computed<ICardTick[]>(() => {
     const pal = this.finish();
     const ticks: ICardTick[] = [];
