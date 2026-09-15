@@ -301,23 +301,70 @@ function conicalColorAt(fractions: number[], colors: string[], deg: number): str
 }
 
 /**
- * SVG has no conical gradient, so a brushed finish is drawn as a ring of wedges, each carrying a
- * linear gradient between the colours of its own two edges. The sweep is linear in angle within a
- * segment, so matching both edges makes each wedge accurate to the width of the arc it spans; 24 of
- * them is indistinguishable from the real thing and costs a fraction of the elements a per-degree
- * fan would. Only a brushed finish emits these at all.
+ * SVG has no conical gradient, so a sweep is drawn as a fan of wedges, each carrying a linear
+ * gradient between the colours of its own two edges. The sweep is linear in angle within a colour
+ * segment, so matching both edges makes each wedge accurate to the width of the arc it spans.
+ *
+ * `rIn` of 0 gives pie wedges filling a disc (the face), anything else an annulus (the bezel ring).
  */
-const CONIC_WEDGES = 24;
-function conicalWedges(fractions: number[], colors: string[]): IFrameWedge[] {
-  const rMid = (CONIC_INNER_R + CONIC_OUTER_R) / 2;
+function wedgePath(rIn: number, rOut: number, a0: number, a1: number): string {
+  if (rIn > 0) return bandPath(rIn, rOut, a0, a1);
+  const [ox0, oy0] = polar(rOut, a0);
+  const [ox1, oy1] = polar(rOut, a1);
+  const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
+  return `M${CX},${CY} L${ox0.toFixed(2)},${oy0.toFixed(2)}` +
+    ` A${rOut},${rOut} 0 ${large} 1 ${ox1.toFixed(2)},${oy1.toFixed(2)} Z`;
+}
+
+/** A regular subdivision of the circle, in degrees, ends included. */
+function uniformBoundaries(steps: number): number[] {
+  return Array.from({ length: steps + 1 }, (_, i) => (i * 360) / steps);
+}
+
+/**
+ * The same subdivision plus the angle of every colour stop, so no wedge straddles a stop and each
+ * one's two-colour gradient is exact rather than an average across a colour change. The bezel ring
+ * is thin enough that a plain subdivision is indistinguishable; the face is not.
+ */
+function snappedBoundaries(fractions: number[], steps: number): number[] {
+  const edges = new Set(uniformBoundaries(steps));
+  for (const f of fractions) edges.add(clamp(360 * (1 - f), 0, 360));
+  return [...edges].sort((a, b) => a - b);
+}
+
+/**
+ * 24 wedges is indistinguishable from the real ring and costs a fraction of the elements a
+ * per-degree fan would. Only a brushed bezel or a stainless/turned face emits these at all.
+ */
+const FRAME_WEDGE_BOUNDARIES = uniformBoundaries(24);
+
+/** How far past its trailing edge each wedge is painted — see conicalWedges(). */
+const WEDGE_OVERLAP_DEG = 0.4;
+
+/**
+ * A wedge's gradient is linear across a chord while the sweep it stands in for is linear in angle,
+ * so the two agree exactly only on the circle the gradient's endpoints sit on. On the face that
+ * circle is put through the middle of the ring left visible around the horizon window, rather than
+ * halfway to the centre — the centre is under the window and never seen.
+ */
+const FACE_WEDGE_GRAD_R = (WIN_R * (FACE_R / DIAL_R) + FACE_SHADOW_R) / 2;
+
+function conicalWedges(
+  fractions: number[], colors: string[], rIn: number, rOut: number, boundaries: number[],
+  gradR = (rIn + rOut) / 2
+): IFrameWedge[] {
   const wedges: IFrameWedge[] = [];
-  for (let i = 0; i < CONIC_WEDGES; i++) {
-    const d0 = (i * 360) / CONIC_WEDGES;
-    const d1 = ((i + 1) * 360) / CONIC_WEDGES;
-    const [x1, y1] = polar(rMid, d0);
-    const [x2, y2] = polar(rMid, d1);
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const d0 = boundaries[i];
+    const d1 = boundaries[i + 1];
+    if (d1 - d0 < 1e-6) continue;
+    const [x1, y1] = polar(gradR, d0);
+    const [x2, y2] = polar(gradR, d1);
     wedges.push({
-      d: bandPath(CONIC_INNER_R, CONIC_OUTER_R, d0, d1),
+      // Painted a shade past its trailing edge so neighbours butt rather than meet: two antialiased
+      // edges over the same seam composite to a hairline, which on a large face reads as spokes.
+      // The gradient still runs between the true edges, so no colour moves.
+      d: wedgePath(rIn, rOut, d0, d1 + WEDGE_OVERLAP_DEG),
       x1, y1, x2, y2,
       c0: conicalColorAt(fractions, colors, d0),
       c1: conicalColorAt(fractions, colors, d1)
@@ -347,6 +394,179 @@ const LCD_FACE_STOPS: IGradientStop[] = [
   { o: '0', c: 'rgb(131,133,119)' }, { o: '0.03', c: 'rgb(176,183,167)' }, { o: '0.49', c: 'rgb(165,174,153)' },
   { o: '0.5', c: 'rgb(166,175,156)' }, { o: '1', c: 'rgb(175,184,165)' }
 ];
+
+
+// ---------------------------------------------------------------------------
+// The dial face — drawBackground.js, and the same 18 finishes Skip's Classic Steel widget already
+// offers under `gauge.backgroundColor`, so the two gauges agree face-for-face as well as
+// bezel-for-bezel. Twelve are plain gradients and two are textures, all reproduced exactly; two are
+// conical sweeps, exact to the width of a wedge; the two brushed ones are the only approximations
+// (see brushedGradient below).
+// ---------------------------------------------------------------------------
+
+/** Where drawBackground.js runs the face gradient: y = width * 0.084112 down to the face diameter. */
+const FACE_GRAD_Y1 = 25.234;
+const FACE_GRAD_Y2 = 249.532;
+
+interface ITextureShape { d: string; fill?: string; grad?: number; }
+/** A repeating tile, drawn in its own coordinate system and sized in viewBox units. */
+interface ITextureTile { size: number; gradients: IFrameGradient[]; shapes: ITextureShape[]; }
+/** One scribed turning circle of the `turned` finish. */
+interface IScribe { cx: number; cy: number; r: number; stroke: string; }
+
+interface IBackgroundDesign {
+  /** The plain finishes: one gradient across the face. */
+  gradient?: IFrameGradient;
+  /** stainless and turned: a conical sweep across the whole face. */
+  conical?: { fractions: number[]; colors: string[] };
+  /** turned only: the scribed turning circles laid over that sweep. */
+  scribed?: boolean;
+  /** carbon and punchedSheet: a repeating tile. */
+  texture?: ITextureTile;
+  /**
+   * steelseries paints its side vignette before the brushed texture goes down and after the two
+   * tiles do, so of the four finishes that reach that branch only carbon and punchedSheet actually
+   * end up wearing it — the brushed pair paint straight over theirs.
+   */
+  vignette?: boolean;
+  /** Dial ink, from the same definition's labelColor and symbolColor. */
+  label: string;
+  symbol: string;
+  /** The face colour the engraved numerals are haloed against, so they read on a light face too. */
+  halo: string;
+}
+
+function faceGradient(start: string, fraction: string, stop: string): IFrameGradient {
+  return {
+    kind: 'linear', x1: 0, y1: FACE_GRAD_Y1, x2: 0, y2: FACE_GRAD_Y2,
+    stops: [{ o: '0', c: start }, { o: '0.4', c: fraction }, { o: '1', c: stop }]
+  };
+}
+
+/** A rectangle as path data, so a texture tile is a list of one kind of element. */
+function rectPath(x: number, y: number, w: number, h: number): string {
+  return `M${x},${y} h${w} v${h} h${-w} Z`;
+}
+
+/**
+ * The brushed finishes are per-pixel noise over a base colour, lit by a sinusoidal sheen across the
+ * image (brushedMetalTexture.js with shine 0.5, so the centre column sits at base + 127.5). The
+ * sheen is the whole of what reads at a glance and is reproduced here; the grain is not, because SVG
+ * can only make noise through a raster filter pass — the per-frame cost this widget exists to avoid.
+ * These two are therefore the only finishes that are an approximation rather than a reproduction.
+ */
+function brushedGradient(base: string): IFrameGradient {
+  const n = parseInt(base.slice(1), 16);
+  const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const stops: IGradientStop[] = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8;
+    const shine = 127.5 * Math.sin(Math.PI * t);
+    const [r, g, b] = channels.map(c => Math.round(clamp(c + shine, 0, 255)));
+    stops.push({ o: t.toFixed(3), c: `rgb(${r}, ${g}, ${b})` });
+  }
+  return { kind: 'linear', x1: 0, y1: 0, x2: 300, y2: 0, stops };
+}
+
+/**
+ * carbonBuffer.js, 1:1. Eight gradient-filled rectangles in a 12-unit tile. steelseries tiles this
+ * at 12 device pixels whatever the gauge size; here it is 12 viewBox units, so it matches exactly at
+ * 300px and scales with the tile instead of getting finer — which is the behaviour a resizable
+ * vector instrument wants anyway.
+ */
+const CARBON_TILE: ITextureTile = {
+  size: 12,
+  gradients: [
+    { kind: 'linear', x1: 0, y1: 0, x2: 0, y2: 6, stops: [{ o: '0', c: 'rgb(35, 35, 35)' }, { o: '1', c: 'rgb(23, 23, 23)' }] },
+    { kind: 'linear', x1: 0, y1: 0, x2: 0, y2: 5, stops: [{ o: '0', c: 'rgb(38, 38, 38)' }, { o: '1', c: 'rgb(30, 30, 30)' }] },
+    { kind: 'linear', x1: 0, y1: 6, x2: 0, y2: 12, stops: [{ o: '0', c: 'rgb(35, 35, 35)' }, { o: '1', c: 'rgb(23, 23, 23)' }] },
+    { kind: 'linear', x1: 0, y1: 6, x2: 0, y2: 11, stops: [{ o: '0', c: 'rgb(38, 38, 38)' }, { o: '1', c: 'rgb(30, 30, 30)' }] },
+    { kind: 'linear', x1: 0, y1: 0, x2: 0, y2: 6, stops: [{ o: '0', c: '#303030' }, { o: '1', c: 'rgb(40, 40, 40)' }] },
+    { kind: 'linear', x1: 0, y1: 1, x2: 0, y2: 6, stops: [{ o: '0', c: 'rgb(53, 53, 53)' }, { o: '1', c: 'rgb(45, 45, 45)' }] },
+    { kind: 'linear', x1: 0, y1: 6, x2: 0, y2: 12, stops: [{ o: '0', c: '#303030' }, { o: '1', c: '#282828' }] },
+    { kind: 'linear', x1: 0, y1: 7, x2: 0, y2: 12, stops: [{ o: '0', c: '#353535' }, { o: '1', c: '#2D2D2D' }] }
+  ],
+  shapes: [
+    { d: rectPath(0, 0, 6, 6), grad: 0 },
+    { d: rectPath(1, 0, 4, 5), grad: 1 },
+    { d: rectPath(6, 6, 6, 6), grad: 2 },
+    { d: rectPath(7, 6, 4, 5), grad: 3 },
+    { d: rectPath(6, 0, 6, 6), grad: 4 },
+    { d: rectPath(7, 1, 4, 5), grad: 5 },
+    { d: rectPath(0, 6, 6, 6), grad: 6 },
+    { d: rectPath(1, 7, 4, 5), grad: 7 }
+  ]
+};
+
+/** punchedSheetBuffer.js, 1:1: a 15-unit tile, its beziers resolved to whole units. */
+const PUNCHED_SHEET_TILE: ITextureTile = {
+  size: 15,
+  gradients: [
+    { kind: 'linear', x1: 0, y1: 1, x2: 0, y2: 7, stops: [{ o: '0', c: '#000000' }, { o: '1', c: '#444444' }] },
+    { kind: 'linear', x1: 0, y1: 8, x2: 0, y2: 14, stops: [{ o: '0', c: '#000000' }, { o: '1', c: '#444444' }] }
+  ],
+  shapes: [
+    { d: rectPath(0, 0, 15, 15), fill: '#1D2123' },
+    { d: 'M0,4 C0,6 1,7 3,7 C5,7 6,6 6,4 C6,2 5,1 3,1 C1,1 0,2 0,4 Z', grad: 0 },
+    { d: 'M0,3 C0,5 1,6 3,6 C5,6 6,5 6,3 C6,1 5,0 3,0 C1,0 0,1 0,3 Z', fill: '#050506' },
+    { d: 'M7,11 C7,13 8,14 10,14 C12,14 13,13 13,11 C13,9 12,8 10,8 C8,8 7,9 7,11 Z', grad: 1 },
+    { d: 'M7,10 C7,12 8,13 10,13 C12,13 13,12 13,10 C13,8 12,7 10,7 C8,7 7,8 7,10 Z', fill: '#050506' }
+  ]
+};
+
+/** The sweep stainless and turned share, from drawBackground.js. */
+const STAINLESS_CONICAL = {
+  fractions: [0, 0.03, 0.1, 0.14, 0.24, 0.33, 0.38, 0.5, 0.62, 0.67, 0.76, 0.81, 0.85, 0.97, 1],
+  colors: [
+    '#FDFDFD', '#FDFDFD', '#B2B2B4', '#ACACAE', '#FDFDFD', '#8E8E8E', '#8E8E8E', '#FDFDFD',
+    '#8E8E8E', '#8E8E8E', '#FDFDFD', '#ACACAE', '#B2B2B4', '#FDFDFD', '#FDFDFD'
+  ]
+};
+const FACE_WEDGE_BOUNDARIES = snappedBoundaries(STAINLESS_CONICAL.fractions, 48);
+
+/**
+ * The turnings of the `turned` finish: a lathe circle stepped round the face, each one followed by a
+ * darker copy a fraction of a step behind it to read as the shadow of the cut. Step size, radius and
+ * both stroke colours are drawBackground.js's.
+ */
+const TURNED_SCRIBES: IScribe[] = (() => {
+  const turnRadius = FACE_SHADOW_R * 0.55;
+  const step = (Math.PI / 180) * (500 / FACE_SHADOW_R);
+  const end = 2 * Math.PI - step * 0.3;
+  const scribes: IScribe[] = [];
+  const passes: [number, string][] = [[0, 'rgba(240,240,255,0.25)'], [0.3, 'rgba(25,10,10,0.1)']];
+  for (let a = 0; a < end; a += step) {
+    for (const [phase, stroke] of passes) {
+      const t = a + step * phase;
+      scribes.push({ cx: CX + turnRadius * Math.cos(t), cy: CY + turnRadius * Math.sin(t), r: turnRadius, stroke });
+    }
+  }
+  return scribes;
+})();
+
+/** Keyed by the same `gauge.backgroundColor` values Skip's Classic Steel widget already stores. */
+const BACKGROUND_DESIGNS: Record<string, IBackgroundDesign> = {
+  darkGray: { gradient: faceGradient('#000000', '#333333', '#999999'), label: '#FFFFFF', symbol: '#B4B4B4', halo: '#333333' },
+  satinGray: { gradient: faceGradient('#2D3939', '#2D3939', '#2D3939'), label: '#A7B8B4', symbol: '#899A96', halo: '#2D3939' },
+  lightGray: { gradient: faceGradient('#828282', '#B5B5B5', '#FDFDFD'), label: '#000000', symbol: '#505050', halo: '#B5B5B5' },
+  white: { gradient: faceGradient('#FFFFFF', '#FFFFFF', '#FFFFFF'), label: '#000000', symbol: '#505050', halo: '#FFFFFF' },
+  black: { gradient: faceGradient('#000000', '#000000', '#000000'), label: '#FFFFFF', symbol: '#969696', halo: '#000000' },
+  beige: { gradient: faceGradient('#B2AC96', '#CCCDB8', '#E7E7D6'), label: '#000000', symbol: '#505050', halo: '#CCCDB8' },
+  brown: { gradient: faceGradient('#F5E1C1', '#F5E1C1', '#FFFAF0'), label: '#6D492F', symbol: '#59351B', halo: '#F5E1C1' },
+  red: { gradient: faceGradient('#C65D5F', '#D48486', '#F2DADA'), label: '#000000', symbol: '#5A0000', halo: '#D48486' },
+  green: { gradient: faceGradient('#417828', '#81AB5F', '#DAEDCA'), label: '#000000', symbol: '#005A00', halo: '#81AB5F' },
+  blue: { gradient: faceGradient('#2D537A', '#7390AA', '#E3EAEE'), label: '#000000', symbol: '#00005A', halo: '#7390AA' },
+  anthracite: { gradient: faceGradient('#323236', '#2F2F33', '#45454A'), label: '#FAFAFA', symbol: '#B4B4B4', halo: '#2F2F33' },
+  mud: { gradient: faceGradient('#505652', '#464C48', '#393E3A'), label: '#FFFFF0', symbol: '#E1E1D2', halo: '#464C48' },
+  punchedSheet: { texture: PUNCHED_SHEET_TILE, vignette: true, label: '#FFFFFF', symbol: '#B4B4B4', halo: '#1D2123' },
+  carbon: { texture: CARBON_TILE, vignette: true, label: '#FFFFFF', symbol: '#B4B4B4', halo: '#232323' },
+  stainless: { conical: STAINLESS_CONICAL, label: '#000000', symbol: '#505050', halo: '#DCDCDC' },
+  brushedMetal: { gradient: brushedGradient('#45454A'), label: '#000000', symbol: '#505050', halo: '#8A8A8F' },
+  brushedStainless: { gradient: brushedGradient('#6E6E70'), label: '#000000', symbol: '#505050', halo: '#A8A8AA' },
+  turned: { conical: STAINLESS_CONICAL, scribed: true, label: '#000000', symbol: '#505050', halo: '#DCDCDC' }
+};
+
+const DEFAULT_BACKGROUND_DESIGN = 'carbon';
 
 @Component({
   selector: 'widget-sea-horizon',
@@ -402,6 +622,7 @@ export class WidgetSeaHorizonComponent {
       type: 'seaHorizon',
       noFrameVisible: true,
       faceColor: 'anthracite',
+      backgroundColor: 'carbon',
       invertPitch: false,
       invertRoll: false,
       heelCautionAngle: 20,
@@ -556,9 +777,69 @@ export class WidgetSeaHorizonComponent {
     const conical = this.frameDesign().conical;
     if (!conical) return [];
     const suffix = this.id();
-    return conicalWedges(conical.fractions, conical.colors)
+    return conicalWedges(conical.fractions, conical.colors, CONIC_INNER_R, CONIC_OUTER_R, FRAME_WEDGE_BOUNDARIES)
       .map((w, i) => ({ ...w, id: `skh-wg${i}-${suffix}` }));
   });
+
+  // ---- dial face -----------------------------------------------------------
+  /** The face the stored `gauge.backgroundColor` selects, falling back to the one it ships with. */
+  private readonly backgroundDesign = computed<IBackgroundDesign>(() => {
+    const key = this.runtime.options()?.gauge?.backgroundColor ?? DEFAULT_BACKGROUND_DESIGN;
+    return BACKGROUND_DESIGNS[key] ?? BACKGROUND_DESIGNS[DEFAULT_BACKGROUND_DESIGN];
+  });
+
+  /** Set for the twelve plain finishes and the two brushed ones; null for a texture or a sweep. */
+  protected readonly backgroundGradient = computed(() => {
+    const g = this.backgroundDesign().gradient;
+    return g ? { ...g, id: this.ids().background } : null;
+  });
+
+  /** Set for carbon and punchedSheet only, with every tile gradient reference already resolved. */
+  protected readonly backgroundTexture = computed(() => {
+    const tile = this.backgroundDesign().texture;
+    if (!tile) return null;
+    const suffix = this.id();
+    const gradients = tile.gradients.map((g, i) => ({ ...g, id: `skh-tg${i}-${suffix}` }));
+    return {
+      id: this.ids().background,
+      size: tile.size,
+      gradients,
+      shapes: tile.shapes.map(shape => ({
+        d: shape.d,
+        fill: shape.grad === undefined ? (shape.fill ?? 'none') : `url(#${gradients[shape.grad].id})`
+      }))
+    };
+  });
+
+  /** Set for stainless and turned only. */
+  protected readonly backgroundWedges = computed(() => {
+    const conical = this.backgroundDesign().conical;
+    if (!conical) return [];
+    const suffix = this.id();
+    return conicalWedges(conical.fractions, conical.colors, 0, FACE_SHADOW_R, FACE_WEDGE_BOUNDARIES, FACE_WEDGE_GRAD_R)
+      .map((w, i) => ({ ...w, id: `skh-bw${i}-${suffix}` }));
+  });
+
+  /** The lathe turnings, for the one finish that has them. */
+  protected readonly turnedScribes = computed(() => this.backgroundDesign().scribed ? TURNED_SCRIBES : []);
+
+  /**
+   * What the face disc itself is painted with. A sweep covers it with wedges, so there it is only
+   * the backstop that keeps the hairlines between wedges from showing the tile behind.
+   */
+  protected readonly faceFill = computed(() => {
+    const design = this.backgroundDesign();
+    return design.gradient || design.texture ? `url(#${this.ids().background})` : design.halo;
+  });
+
+  /** steelseries lays its side vignette over the textured finishes only. */
+  protected readonly faceVignette = computed(() => this.backgroundDesign().vignette === true);
+
+  // Dial ink follows the face, exactly as steelseries' tick labels follow their background's
+  // labelColor / symbolColor. Without this a white or beige face would carry white numerals.
+  protected readonly labelColor = computed(() => this.backgroundDesign().label);
+  protected readonly symbolColor = computed(() => this.backgroundDesign().symbol);
+  protected readonly haloColor = computed(() => this.backgroundDesign().halo);
 
   // ---- animated transforms -------------------------------------------------
   protected readonly worldTransform = computed(() => {
@@ -612,7 +893,9 @@ export class WidgetSeaHorizonComponent {
       vignette: `skh-vignette-${suffix}`,
       lcdBezel: `skh-lcdb-${suffix}`,
       lcdFace: `skh-lcdf-${suffix}`,
-      window: `skh-window-${suffix}`
+      window: `skh-window-${suffix}`,
+      background: `skh-bg-${suffix}`,
+      face: `skh-face-${suffix}`
     };
   });
 
@@ -621,7 +904,8 @@ export class WidgetSeaHorizonComponent {
     return {
       sky: `url(#${r.sky})`, sea: `url(#${r.sea})`, glass: `url(#${r.glass})`,
       shadow: `url(#${r.shadow})`, vignette: `url(#${r.vignette})`,
-      lcdBezel: `url(#${r.lcdBezel})`, lcdFace: `url(#${r.lcdFace})`, window: `url(#${r.window})`
+      lcdBezel: `url(#${r.lcdBezel})`, lcdFace: `url(#${r.lcdFace})`, window: `url(#${r.window})`,
+      background: `url(#${r.background})`, face: `url(#${r.face})`
     };
   });
 

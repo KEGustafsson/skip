@@ -38,6 +38,50 @@
       </linearGradient>
     }
 
+    <!-- Dial face. A gradient, a repeating tile or a conical sweep, depending on the finish. -->
+    @if (backgroundGradient(); as bg) {
+      <linearGradient
+        [attr.id]="bg.id" gradientUnits="userSpaceOnUse"
+        [attr.x1]="bg.x1" [attr.y1]="bg.y1" [attr.x2]="bg.x2" [attr.y2]="bg.y2"
+      >
+        @for (s of bg.stops; track $index) {
+          <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+        }
+      </linearGradient>
+    }
+    @if (backgroundTexture(); as tex) {
+      @for (g of tex.gradients; track g.id) {
+        <linearGradient
+          [attr.id]="g.id" gradientUnits="userSpaceOnUse"
+          [attr.x1]="g.x1" [attr.y1]="g.y1" [attr.x2]="g.x2" [attr.y2]="g.y2"
+        >
+          @for (s of g.stops; track $index) {
+            <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
+          }
+        </linearGradient>
+      }
+      <pattern
+        [attr.id]="tex.id" patternUnits="userSpaceOnUse"
+        x="0" y="0" [attr.width]="tex.size" [attr.height]="tex.size"
+      >
+        @for (shape of tex.shapes; track $index) {
+          <path [attr.d]="shape.d" [attr.fill]="shape.fill" />
+        }
+      </pattern>
+    }
+    @for (w of backgroundWedges(); track w.id) {
+      <linearGradient
+        [attr.id]="w.id" gradientUnits="userSpaceOnUse"
+        [attr.x1]="w.x1" [attr.y1]="w.y1" [attr.x2]="w.x2" [attr.y2]="w.y2"
+      >
+        <stop offset="0" [attr.stop-color]="w.c0" />
+        <stop offset="1" [attr.stop-color]="w.c1" />
+      </linearGradient>
+    }
+    <clipPath [attr.id]="ids().face">
+      <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" />
+    </clipPath>
+
     <linearGradient [attr.id]="ids().sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#2E5E78" />
       <stop offset="1" stop-color="#53809A" />
@@ -100,8 +144,27 @@
       <path [attr.d]="w.d" [attr.fill]="'url(#' + w.id + ')'" />
     }
     <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="frameInnerR" fill="#BFBFBF" />
-    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceR" fill="#0A0C0D" />
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceR" [attr.fill]="haloColor()" />
   }
+
+  <!-- The face. steelseries draws its background whether or not the frame is shown, and at the same
+       extent as the shading and glass above — so it follows the same transform they do. -->
+  <g [attr.transform]="overlayTransform()">
+    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="faceFill()" />
+    @for (w of backgroundWedges(); track w.id) {
+      <path [attr.d]="w.d" [attr.fill]="'url(#' + w.id + ')'" />
+    }
+    @if (turnedScribes().length) {
+      <g [attr.clip-path]="url().face" fill="none" stroke-width="0.5">
+        @for (scribe of turnedScribes(); track $index) {
+          <circle [attr.cx]="scribe.cx" [attr.cy]="scribe.cy" [attr.r]="scribe.r" [attr.stroke]="scribe.stroke" />
+        }
+      </g>
+    }
+    @if (faceVignette()) {
+      <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="url().vignette" />
+    }
+  </g>
 
   <g [attr.transform]="dialTransform()">
     <!-- Horizon window. The world rotates against a boat-fixed dial. -->
@@ -160,14 +223,17 @@
           [attr.y1]="tick.y1"
           [attr.x2]="tick.x2"
           [attr.y2]="tick.y2"
-          [class.major]="tick.major"
+          [attr.stroke]="tick.major ? labelColor() : symbolColor()"
           [attr.stroke-width]="tick.major ? 2.4 : 1.2"
         />
       }
     </g>
     <g class="numerals">
       @for (numeral of heelNumerals; track $index) {
-        <text [attr.x]="numeral.x" [attr.y]="numeral.y" [attr.transform]="numeral.transform">{{ numeral.text }}</text>
+        <text
+          [attr.x]="numeral.x" [attr.y]="numeral.y" [attr.transform]="numeral.transform"
+          [attr.fill]="labelColor()" [attr.stroke]="haloColor()"
+        >{{ numeral.text }}</text>
       }
     </g>
     <g class="limit-index">
@@ -225,7 +291,6 @@
        the dial's extent, which is the face with the case on and the whole tile with it off. -->
   <g [attr.transform]="overlayTransform()" pointer-events="none">
     <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="url().shadow" />
-    <circle [attr.cx]="cx" [attr.cy]="cy" [attr.r]="faceShadowR" [attr.fill]="url().vignette" />
     <path class="glass" [attr.d]="glassPath" [attr.fill]="url().glass" />
   </g>
 </svg>

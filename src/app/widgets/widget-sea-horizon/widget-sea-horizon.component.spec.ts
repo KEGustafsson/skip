@@ -27,6 +27,15 @@ interface SeaHorizonInternals {
   pointerTransform: () => string;
   frameLayers: () => { r: number; fill: string }[];
   frameWedges: () => { d: string; c0: string; c1: string }[];
+  backgroundGradient: () => { x1?: number; y1?: number; x2?: number; y2?: number; stops: { o: string; c: string }[] } | null;
+  backgroundTexture: () => { size: number; shapes: { d: string; fill: string }[] } | null;
+  backgroundWedges: () => { d: string; c0: string; c1: string }[];
+  turnedScribes: () => { cx: number; cy: number; r: number; stroke: string }[];
+  faceVignette: () => boolean;
+  faceFill: () => string;
+  labelColor: () => string;
+  symbolColor: () => string;
+  haloColor: () => string;
   ready: () => boolean;
 }
 
@@ -515,5 +524,76 @@ describe('WidgetSeaHorizonComponent bezel finishes', () => {
 
   it('falls back to anthracite for a finish it does not know', () => {
     expect(finish('not-a-finish')).toEqual(finish('anthracite'));
+  });
+});
+
+describe('WidgetSeaHorizonComponent dial faces', () => {
+  beforeEach(() => TestBed.resetTestingModule());
+
+  function face(backgroundColor?: string) {
+    TestBed.resetTestingModule();
+    return mount(baseConfig(backgroundColor === undefined ? {} : { backgroundColor })).component;
+  }
+
+  // Classic Steel defaults to carbon, and these two sit side by side on a dashboard.
+  it('wears carbon by default, as the Classic Steel gauge does', () => {
+    const c = face();
+    expect(c.backgroundTexture()?.size).toBe(12);
+    expect(c.backgroundGradient()).toBeNull();
+    expect(c.backgroundWedges()).toHaveLength(0);
+  });
+
+  // drawBackground.js runs the plain finishes down a linear gradient — not the radial one a dial
+  // face looks like it ought to have — from y = width * 0.084112 to the face diameter, and puts its
+  // middle colour at 0.4 rather than halfway.
+  it('runs a plain finish down the gradient drawBackground.js uses', () => {
+    const gradient = face('blue').backgroundGradient();
+    expect(gradient).not.toBeNull();
+    expect(gradient?.y1).toBeCloseTo(25.234, 3);
+    expect(gradient?.y2).toBeCloseTo(249.532, 3);
+    expect(gradient?.stops).toEqual([
+      { o: '0', c: '#2D537A' }, { o: '0.4', c: '#7390AA' }, { o: '1', c: '#E3EAEE' }
+    ]);
+  });
+
+  it('tiles the two textured finishes rather than shading them', () => {
+    expect(face('carbon').backgroundTexture()?.shapes).toHaveLength(8);
+    expect(face('punchedSheet').backgroundTexture()?.size).toBe(15);
+    expect(face('punchedSheet').backgroundGradient()).toBeNull();
+  });
+
+  it('sweeps stainless, and lays the lathe turnings over turned only', () => {
+    const stainless = face('stainless');
+    expect(stainless.backgroundWedges().length).toBeGreaterThan(48);
+    expect(stainless.turnedScribes()).toHaveLength(0);
+    // A light pass and its shadow per step, all the way round.
+    expect(face('turned').turnedScribes()).toHaveLength(180);
+  });
+
+  /**
+   * steelseries paints its side vignette *before* the brushed texture and *after* the two tiles, so
+   * only carbon and punchedSheet keep it — the brushed pair paint straight over theirs. Reading the
+   * branch as "textures get a vignette" darkens the brushed faces by a quarter, which measured 40+
+   * RGB counts against the real gauge on the part of the face this widget actually leaves bare.
+   */
+  it('vignettes only the finishes steelseries leaves vignetted', () => {
+    expect(face('carbon').faceVignette()).toBe(true);
+    expect(face('punchedSheet').faceVignette()).toBe(true);
+    expect(face('brushedMetal').faceVignette()).toBe(false);
+    expect(face('brushedStainless').faceVignette()).toBe(false);
+    expect(face('blue').faceVignette()).toBe(false);
+  });
+
+  // Engraved marks take their ink from the face the way steelseries' tick labels take theirs from
+  // the background's labelColor, so a light face does not end up carrying white numerals.
+  it('takes the dial ink from the face', () => {
+    expect(face('carbon').labelColor()).toBe('#FFFFFF');
+    expect(face('white').labelColor()).toBe('#000000');
+    expect(face('white').haloColor()).toBe('#FFFFFF');
+    expect(face('blue').symbolColor()).toBe('#00005A');
+  });
+
+  it('falls back to carbon for a face it does not know', () => {
+    expect(face('not-a-face').backgroundTexture()?.size).toBe(12);
   });
 });

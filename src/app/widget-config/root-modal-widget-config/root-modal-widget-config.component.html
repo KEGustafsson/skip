@@ -684,7 +684,7 @@
               }
               <!-- Steelgauge -->
               @if (widgetConfig?.gauge?.type === "steel" || widgetConfig?.gauge?.type === 'horizon' || widgetConfig?.gauge?.type === 'seaHorizon') {
-                @if (widgetConfig?.gauge?.type === 'steel') {
+                @if (widgetConfig?.gauge?.type === 'steel' || widgetConfig?.gauge?.type === 'seaHorizon') {
                   <mat-form-field formGroupName="gauge">
                     <mat-label>Background Style</mat-label>
                     <mat-select

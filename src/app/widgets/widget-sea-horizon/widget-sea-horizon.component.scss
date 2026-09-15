@@ -1,6 +1,6 @@
 // The instrument is a physical object: brushed metal, glass and an LCD look the same whatever
-// theme the rest of the dashboard is in, exactly as the steelseries gauges do. Only the bezel
-// finish is configurable, through gauge.faceColor.
+// theme the rest of the dashboard is in, exactly as the steelseries gauges do. The bezel finish and
+// the dial face are configurable, through gauge.faceColor and gauge.backgroundColor.
 :host {
   display: block;
   width: 100%;
@@ -49,20 +49,13 @@
   stroke-opacity: 0.5;
 }
 
-.ticks line {
-  stroke: #9aa5a9;
-
-  &.major {
-    stroke: #e8ecee;
-  }
-}
-
+// Stroke and fill are bound per element instead: the engraved marks take their ink from the face,
+// the way steelseries' tick labels take theirs from the background's labelColor / symbolColor. A CSS
+// declaration here would beat those presentation attributes, so there is none.
 .numerals text {
-  fill: #e8ecee;
   font-size: 11px;
   font-weight: 700;
   text-anchor: middle;
-  stroke: #0d1012;
   stroke-width: 2.6;
   stroke-linejoin: round;
   paint-order: stroke;

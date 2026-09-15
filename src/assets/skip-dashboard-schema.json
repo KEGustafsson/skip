@@ -2624,6 +2624,7 @@
         "enableTimeout": true,
         "filterSelfPaths": true,
         "gauge": {
+          "backgroundColor": "carbon",
           "damping": 0,
           "faceColor": "anthracite",
           "heelAlarmAngle": 30,
