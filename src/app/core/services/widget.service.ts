@@ -153,6 +153,7 @@ export class WidgetService {
     WidgetSeaHorizonComponent: () => import('../../widgets/widget-sea-horizon/widget-sea-horizon.component').then(m => m.WidgetSeaHorizonComponent),
     WidgetHeelGaugeComponent: () => import('../../widgets/widget-heel-gauge/widget-heel-gauge.component').then(m => m.WidgetHeelGaugeComponent),
     WidgetSteelGaugeComponent: () => import('../../widgets/widget-gauge-steel/widget-gauge-steel.component').then(m => m.WidgetSteelGaugeComponent),
+    WidgetSteelCompassComponent: () => import('../../widgets/widget-gauge-steel-compass/widget-gauge-steel-compass.component').then(m => m.WidgetSteelCompassComponent),
     WidgetGaugeNgRadialComponent: () => import('../../widgets/widget-gauge-ng-radial/widget-gauge-ng-radial.component').then(m => m.WidgetGaugeNgRadialComponent),
     WidgetGaugeNgLinearComponent: () => import('../../widgets/widget-gauge-ng-linear/widget-gauge-ng-linear.component').then(m => m.WidgetGaugeNgLinearComponent),
     WidgetGaugeNgCompassComponent: () => import('../../widgets/widget-gauge-ng-compass/widget-gauge-ng-compass.component').then(m => m.WidgetGaugeNgCompassComponent),
@@ -394,6 +395,19 @@ export class WidgetService {
       requiredPlugins: [],
       selector: 'widget-gauge-steel',
       componentClassName: 'WidgetSteelGaugeComponent'
+    },
+    {
+      name: 'Steel Compass',
+      description: 'A classic steel binnacle compass: the card turns under a fixed pointer, with the heading shown on an LCD window. Pairs with the Classic Steel gauges.',
+      icon: 'steelCompassGauge',
+      minWidth: 1,
+      minHeight: 2,
+      defaultWidth: 4,
+      defaultHeight: 6,
+      category: 'Gauge',
+      requiredPlugins: [],
+      selector: 'widget-gauge-steel-compass',
+      componentClassName: 'WidgetSteelCompassComponent'
     },
     {
       name: 'Battery Monitor',

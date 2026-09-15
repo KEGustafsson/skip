@@ -334,6 +334,9 @@ export interface IWidgetSvcConfig {
     radialSize?: string;
     /** Optional. Used by GaugeSteel to set faceplate rotation */
     rotateFace?: boolean;
+    /** Optional. Used by the steel compass to print the degree scale on the card */
+    degreeScale?: boolean;
+
     /** Optional. GaugeSteel digital or bar */
     digitalMeter?: boolean;
     /** Optional. Width of gauge highlights */
