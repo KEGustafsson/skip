@@ -123,6 +123,12 @@ describe('WidgetSteelCompassComponent', () => {
     options.set(makeConfig('self.environment.wind.angleApparent'));
     fixture.detectChanges();
     expect(internals.unitLabel()).toBe('°');
+
+    // "True" here is the wind's velocity frame, not a north reference: this is an angle off the
+    // bow, and labelling it °T would present it as a true bearing.
+    options.set(makeConfig('self.environment.wind.angleTrueWater'));
+    fixture.detectChanges();
+    expect(internals.unitLabel()).toBe('°');
   });
 
   it('defaults to a rotating card fed degrees off a radian path', () => {

@@ -34,19 +34,6 @@
   pointer-events: none;
 }
 
-// Container queries reached Chrome 105 / Safari 16. Skip also runs inside third-party chartplotter
-// browsers through the Freeboard-SK panel, so an engine without them gets a fixed square that still
-// lands the readout on the face, sized for a typical 2x2 tile.
-@supports not (container-type: size) {
-  .face {
-    width: 240px;
-    // Stated outright rather than left to aspect-ratio: an engine this old may not have that
-    // either, and a zero-height box would stack the readout on the rim.
-    height: 240px;
-    font-size: 16px;
-  }
-}
-
 .face-title {
   position: absolute;
   top: 30%;
@@ -131,8 +118,21 @@
   }
 }
 
+// Container queries reached Chrome 105 / Safari 16. Skip also runs inside third-party chartplotter
+// browsers through the Freeboard-SK panel, so an engine without them gets a fixed square that still
+// lands the readout on the face, sized for a typical 2x2 tile — and the LCD sized to match it, kept
+// in the same block so the two cannot drift apart.
 @supports not (container-type: size) {
+  .face {
+    width: 240px;
+    // Stated outright rather than left to aspect-ratio: an engine this old may not have that
+    // either, and a zero-height box would stack the readout on the rim.
+    height: 240px;
+    font-size: 16px;
+  }
+
   .face-title { font-size: 1em; }
+
   .lcd {
     width: 100px;
     height: 34px;
@@ -140,6 +140,7 @@
     border-radius: 3px;
     padding: 0 6px;
   }
+
   .lcd-unit { font-size: 0.75em; }
   .lcd-value { font-size: 1.5em; }
 }
