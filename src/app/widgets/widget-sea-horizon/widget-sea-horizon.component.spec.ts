@@ -365,9 +365,7 @@ describe('WidgetSeaHorizonComponent dial geometry', () => {
   }
 
   // The face shading and the glass dome are authored at the steelseries face radius while the dial
-  // is authored at its own, so the two only line up if both are scaled to the same extent. Before
-  // this was handled, turning the case off grew the dial to the tile but left the vignette and glass
-  // stopping 25px short of its edge.
+  // is authored at its own, so the two line up only if both are scaled to the same extent.
   it('paints the face shading and glass out to the dial edge, case on or off', () => {
     for (const noFrameVisible of [true, false]) {
       TestBed.resetTestingModule();
