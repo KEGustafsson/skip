@@ -471,11 +471,13 @@ export class WidgetSeaHorizonComponent {
     this.destroyRef.onDestroy(() => this.disarmTransitions());
   }
 
+  /** Stream callback for the pitch sub-field: damp the sample, then settle the transition gate. */
   private readonly onPitch = (pkt: IPathUpdate): void => {
     this.rawPitch.set(this.damp(this.rawPitch(), pkt?.data?.value as number | null | undefined, 'pitch'));
     this.settleTransitions();
   };
 
+  /** Stream callback for the roll sub-field: damp the sample, then settle the transition gate. */
   private readonly onRoll = (pkt: IPathUpdate): void => {
     this.rawRoll.set(this.damp(this.rawRoll(), pkt?.data?.value as number | null | undefined, 'roll'));
     this.settleTransitions();
