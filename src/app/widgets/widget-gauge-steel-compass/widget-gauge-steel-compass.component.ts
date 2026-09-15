@@ -1,6 +1,7 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { IWidgetSvcConfig } from '../../core/interfaces/widgets-interface';
 import { CanvasService } from '../../core/services/canvas.service';
+import { SkipResizeObserverDirective } from '../../core/directives/skip-resize-observer.directive';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
 import { WidgetStreamsDirective, widgetPathSignature, normalizeWidgetPath, WidgetRepointTracker } from '../../core/directives/widget-streams.directive';
 import { ITheme } from '../../core/services/app-service';
@@ -117,9 +118,10 @@ export function shortestTurn(from: number, to: number): number {
   selector: 'widget-gauge-steel-compass',
   templateUrl: './widget-gauge-steel-compass.component.html',
   styleUrl: './widget-gauge-steel-compass.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SkipResizeObserverDirective]
 })
-export class WidgetSteelCompassComponent implements AfterViewInit, OnDestroy {
+export class WidgetSteelCompassComponent implements OnDestroy {
   // Functional Host2 inputs
   public id = input.required<string>();
   public type = input.required<string>();
@@ -131,9 +133,17 @@ export class WidgetSteelCompassComponent implements AfterViewInit, OnDestroy {
   private readonly canvas = inject(CanvasService);
 
   private readonly caseCanvas = viewChild.required<ElementRef<HTMLCanvasElement>>('caseCanvas');
-  private ctx: CanvasRenderingContext2D | null = null;
-  /** Last size the case was painted at, so a config change can repaint without a resize. */
-  private readonly caseSize = signal<{ width: number; height: number } | null>(null);
+
+  /**
+   * Side of the square dial, in CSS pixels. Both layers are sized to it: the library paints the
+   * case into a canvas of exactly this many CSS pixels (it sets the backing store itself, 1:1, the
+   * way the Classic Steel gauges are drawn), and the SVG card is laid over the same square.
+   */
+  // Nothing to set up on view init: the observer's first resize brings the side, and the effect
+  // below paints from it.
+  protected readonly side = signal(0);
+  private resizeTimer: number | null = null;
+  private lastSide = 0;
 
   public static readonly DEFAULT_CONFIG: IWidgetSvcConfig = {
     displayName: 'Heading',
@@ -292,42 +302,61 @@ export class WidgetSteelCompassComponent implements AfterViewInit, OnDestroy {
     this.turned.update(current => current + shortestTurn(toCompassDegrees(current), value));
   }
 
-  ngAfterViewInit(): void {
-    const element = this.caseCanvas().nativeElement;
-    this.ctx = element.getContext('2d');
-    this.canvas.registerCanvas(element, {
-      autoRelease: true,
-      onResize: (width, height) => this.caseSize.set({ width, height })
-    });
+  /**
+   * Sizing follows the Classic Steel gauge exactly: ignore a box too small to draw in, skip a
+   * resize that does not change the side, and debounce the rest by 120ms — a repaint rebuilds every
+   * cached layer in the library, so a drag that fires dozens of resizes must not run it dozens of
+   * times.
+   */
+  protected onResized(entry: ResizeObserverEntry): void {
+    const { width, height } = entry.contentRect;
+    if (width < 50 || height < 50) return;
+    const side = Math.floor(Math.min(width, height));
+    if (side === this.lastSide) return;
+    this.lastSide = side;
+    if (this.resizeTimer) window.clearTimeout(this.resizeTimer);
+    this.resizeTimer = window.setTimeout(() => {
+      this.side.set(side);
+      this.resizeTimer = null;
+    }, 120);
   }
 
   ngOnDestroy(): void {
-    try {
-      this.canvas.unregisterCanvas(this.caseCanvas().nativeElement);
-    } catch { /* already gone */ }
+    if (this.resizeTimer !== null) {
+      window.clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
+    // Same release the Classic Steel gauge does, so a removed tile frees its backing store.
+    this.canvas.releaseCanvas(this.caseCanvas().nativeElement, { clear: true, removeFromDom: false });
   }
 
   /**
    * Paint the case with the library's own painters, so it is the Classic Steel case rather than a
-   * drawing of one. Square and centred, matching how the SVG above it fits its viewBox, so the card
-   * lands inside the painted face at any tile shape.
+   * drawing of one.
+   *
+   * The canvas is sized here, in CSS pixels at 1:1, because that is what steelseries does with the
+   * `size` it is given and what the Classic Steel gauges therefore get. Setting width clears the
+   * canvas and resets its context, so sizing and painting have to happen together — driving the
+   * size from anywhere else leaves the paint cleared, or scaled against a transform that is no
+   * longer there.
    */
-  private paintCase(size: { width: number; height: number } | null, gauge: ICompassGauge | null): void {
+  private paintCase(side: number, gauge: ICompassGauge | null): void {
     const steel = steelseriesGlobal();
-    const ctx = this.ctx;
-    if (!steel || !ctx || !size || size.width < 1 || size.height < 1) return;
-    const side = Math.min(size.width, size.height);
-
-    ctx.clearRect(0, 0, size.width, size.height);
+    if (!steel || side < 1 || typeof steel.drawFrame !== 'function') return;
     const frame = steel.FrameDesign?.[toEnumKey(gauge?.faceColor ?? 'anthracite')];
     const background = steel.BackgroundColor?.[toEnumKey(gauge?.backgroundColor ?? 'carbon')];
     // A partial global (the unit tests' stand-in) has the names but not the painters.
-    if (!frame || !background || typeof steel.drawFrame !== 'function') return;
+    if (!frame || !background) return;
 
-    const centerX = size.width / 2;
-    const centerY = size.height / 2;
-    steel.drawFrame(ctx, frame, centerX, centerY, side, side);
-    steel.drawBackground(ctx, background, centerX, centerY, side, side);
+    const canvas = this.caseCanvas().nativeElement;
+    canvas.width = side;
+    canvas.height = side;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const centre = side / 2;
+    steel.drawFrame(ctx, frame, centre, centre, side, side);
+    steel.drawBackground(ctx, background, centre, centre, side, side);
     // TYPE1 with no centre knob: the glass highlight, and nothing at the hub — the card has no
     // needle for a knob to hold down.
     steel.drawForeground(ctx, steel.ForegroundType?.['TYPE1'], side, side, false);
@@ -336,9 +365,9 @@ export class WidgetSteelCompassComponent implements AfterViewInit, OnDestroy {
   constructor() {
     // Repaint on a resize or a material change; both are rare, and the card above is untouched.
     effect(() => {
-      const size = this.caseSize();
+      const side = this.side();
       const gauge = this.runtime.options()?.gauge ?? null;
-      untracked(() => this.paintCase(size, gauge));
+      untracked(() => this.paintCase(side, gauge));
     });
 
     effect(() => {

@@ -4,12 +4,23 @@
   height: 100%;
 }
 
-// Two layers on one box: the painted case underneath, the card drawn over it. Both fit the same
-// centred square, so every coordinate in the viewBox lands where it does on the painted face.
-.compass {
+// The observed box, padded like the Classic Steel gauge's wrapper.
+.wrapper {
   position: relative;
   width: 100%;
   height: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+// The dial: a square of the side the component measured, centred in whatever shape the tile is.
+// Sized in the template rather than stretched to 100%, because the library paints the case into a
+// canvas of exactly that many CSS pixels and the card has to land on the painted face.
+.compass {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .case,

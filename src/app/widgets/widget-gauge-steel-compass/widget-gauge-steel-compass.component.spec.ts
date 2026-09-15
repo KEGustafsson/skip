@@ -1,6 +1,6 @@
 import { WritableSignal, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WidgetSteelCompassComponent, toCompassDegrees, shortestTurn } from './widget-gauge-steel-compass.component';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
 import { WidgetStreamsDirective } from '../../core/directives/widget-streams.directive';
@@ -24,6 +24,8 @@ describe('WidgetSteelCompassComponent', () => {
     unitLabel: () => string;
     displayName: () => string;
     cardRotation: () => number;
+    side: () => number;
+    onResized: (entry: ResizeObserverEntry) => void;
     cardLabels: () => { text: string; fill: string }[];
     ink: () => { index: string; label: string };
   }
@@ -59,6 +61,10 @@ describe('WidgetSteelCompassComponent', () => {
     fixture.componentRef.setInput('theme', { contrast: '#ffffff' });
     fixture.detectChanges();
     internals = fixture.componentInstance as unknown as CompassInternals;
+  });
+
+  afterEach(() => {
+    fixture.destroy();
   });
 
   it('shows no reading until a value arrives, so the card resting on 000 is not read as north', () => {
@@ -151,6 +157,33 @@ describe('WidgetSteelCompassComponent', () => {
 
     expect(internals.cardRotation()).toBe(-87);
     expect(fixture.nativeElement.querySelector('.pointer')).toBeNull();
+  });
+
+  it('sizes both layers to one square, so the case and the card cannot drift apart', () => {
+    vi.useFakeTimers();
+    try {
+      const rect = (width: number, height: number) =>
+        ({ contentRect: { width, height } }) as ResizeObserverEntry;
+
+      // A box too small to draw in is ignored, as the Classic Steel gauge ignores it.
+      internals.onResized(rect(40, 40));
+      vi.advanceTimersByTime(200);
+      expect(internals.side()).toBe(0);
+
+      // The side is the short edge, whatever shape the tile is: a wide tile gets a square dial.
+      internals.onResized(rect(420, 240));
+      vi.advanceTimersByTime(200);
+      expect(internals.side()).toBe(240);
+
+      // Debounced: a drag that fires a burst of resizes repaints once, at the last size.
+      internals.onResized(rect(300, 300));
+      internals.onResized(rect(360, 360));
+      expect(internals.side()).toBe(240);
+      vi.advanceTimersByTime(200);
+      expect(internals.side()).toBe(360);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('prints north in the index colour so the card reads at a glance', () => {
