@@ -25,6 +25,7 @@ interface SeaHorizonInternals {
   worldTransform: () => string;
   pointerTransform: () => string;
   frameStops: () => { o: string; c: string }[];
+  ready: () => boolean;
 }
 
 type StreamCallback = (packet: IPathUpdate) => void;
@@ -57,6 +58,8 @@ interface Harness {
   /** Latest callback registered for a path key, so a test can push a reading through it. */
   emit: (pathKey: string, value: number | null) => void;
   observed: { pathName: string; subField?: string }[];
+  /** Every callback handed to observe(), in order, so identity across re-registrations can be checked. */
+  registered: { pathName: string; next: StreamCallback }[];
 }
 
 /**
@@ -68,6 +71,7 @@ function mount(config: IWidgetSvcConfig): Harness {
   const options = signal<IWidgetSvcConfig | undefined>(config);
   const callbacks = new Map<string, StreamCallback>();
   const observed: { pathName: string; subField?: string }[] = [];
+  const registered: { pathName: string; next: StreamCallback }[] = [];
 
   TestBed.configureTestingModule({
     imports: [WidgetSeaHorizonComponent],
@@ -79,6 +83,7 @@ function mount(config: IWidgetSvcConfig): Harness {
           observe: (pathName: string, next: StreamCallback, subField?: string) => {
             callbacks.set(pathName, next);
             observed.push({ pathName, subField });
+            registered.push({ pathName, next });
           }
         }
       }
@@ -96,6 +101,7 @@ function mount(config: IWidgetSvcConfig): Harness {
     fixture,
     options,
     observed,
+    registered,
     emit: (pathKey, value) => callbacks.get(pathKey)?.({ data: { value } } as unknown as IPathUpdate)
   };
 }
@@ -171,6 +177,92 @@ describe('WidgetSeaHorizonComponent stream wiring', () => {
     h.fixture.detectChanges();
 
     expect(h.component.heelText()).toBe('25.0° STBD');
+  });
+
+  // WidgetStreamsDirective keeps a subscription only while it is handed the same callback; a fresh
+  // closure per effect run would tear down and rebuild both pipelines on every unrelated edit.
+  it('hands the streams directive the same callback across unrelated config changes', () => {
+    const h = mount(baseConfig());
+    const firstRoll = h.registered.find(r => r.pathName === 'gaugeRollPath')?.next;
+    const firstPitch = h.registered.find(r => r.pathName === 'gaugePitchPath')?.next;
+
+    h.options.set(baseConfig({ faceColor: 'chrome', damping: 3, invertRoll: true }));
+    h.fixture.detectChanges();
+
+    const rolls = h.registered.filter(r => r.pathName === 'gaugeRollPath');
+    const pitches = h.registered.filter(r => r.pathName === 'gaugePitchPath');
+    expect(rolls.length).toBeGreaterThan(1);
+    expect(rolls.every(r => r.next === firstRoll)).toBe(true);
+    expect(pitches.every(r => r.next === firstPitch)).toBe(true);
+  });
+});
+
+describe('WidgetSeaHorizonComponent motion transitions', () => {
+  // Frames are queued by hand so a test can tell "reading landed" apart from "frame after it".
+  let frames: FrameRequestCallback[];
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+    frames = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { frames.push(cb); return frames.length; });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames[id - 1] = () => undefined; });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  const flushFrames = () => { const due = frames.splice(0); due.forEach(cb => cb(0)); };
+
+  // The step from a level dial to the first real reading must be a snap, not a sweep up from zero,
+  // so transitions are armed only once that reading has been drawn without one.
+  it('paints the first reading without a transition and animates the ones after it', () => {
+    const h = mount(baseConfig());
+    expect(h.component.ready()).toBe(false);
+
+    h.emit('gaugeRollPath', 18);
+    expect(h.component.ready()).toBe(false);
+
+    flushFrames();
+    expect(h.component.ready()).toBe(true);
+  });
+
+  it('never arms transitions on a dial that has nothing to show', () => {
+    const h = mount(baseConfig());
+    flushFrames();
+    expect(h.component.ready()).toBe(false);
+    expect(frames).toHaveLength(0);
+  });
+
+  it('drops transitions when the reading is lost, so recovery snaps too', () => {
+    const h = mount(baseConfig());
+    h.emit('gaugeRollPath', 18);
+    flushFrames();
+    expect(h.component.ready()).toBe(true);
+
+    h.emit('gaugeRollPath', null);
+    expect(h.component.ready()).toBe(false);
+  });
+
+  it('drops transitions on a re-point, so the new path\'s first reading snaps', () => {
+    const h = mount(baseConfig());
+    h.emit('gaugeRollPath', 18);
+    flushFrames();
+    expect(h.component.ready()).toBe(true);
+
+    h.options.set({
+      ...baseConfig(),
+      paths: {
+        gaugePitchPath: { ...ATTITUDE_PATHS.gaugePitchPath, source: 'imu-2' },
+        gaugeRollPath: { ...ATTITUDE_PATHS.gaugeRollPath, source: 'imu-2' }
+      }
+    } as unknown as IWidgetSvcConfig);
+    h.fixture.detectChanges();
+
+    expect(h.component.ready()).toBe(false);
+  });
+
+  it('cancels a pending arm when the reading is lost before the frame runs', () => {
+    const h = mount(baseConfig());
+    h.emit('gaugeRollPath', 18);
+    h.emit('gaugeRollPath', null);
+    flushFrames();
+    expect(h.component.ready()).toBe(false);
   });
 });
 

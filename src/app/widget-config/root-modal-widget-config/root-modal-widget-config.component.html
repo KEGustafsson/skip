@@ -746,24 +746,29 @@
                       Show Frame
                     </mat-checkbox>
                   </div>
+                  <!-- The two angles bound each other: the widget draws caution up to the alarm angle, so
+                       a pair that crosses would store one thing and draw another. Each field's limit
+                       follows the other's live value, and the field being edited is the one that turns
+                       invalid. -->
                   <mat-form-field formGroupName="gauge">
                     <mat-label>Caution Heel Angle</mat-label>
                     <input
                       type="number"
                       min="1"
-                      max="44"
+                      [max]="(formMaster.value.gauge?.heelAlarmAngle ?? 45) - 1"
                       matInput
                       placeholder="Heel angle where the scale turns amber..."
                       name="heelCautionAngle"
                       formControlName="heelCautionAngle"
                     />
                     <span matTextSuffix>°</span>
+                    <mat-error>Must be below the alarm angle</mat-error>
                   </mat-form-field>
                   <mat-form-field formGroupName="gauge">
                     <mat-label>Alarm Heel Angle</mat-label>
                     <input
                       type="number"
-                      min="2"
+                      [min]="(formMaster.value.gauge?.heelCautionAngle ?? 1) + 1"
                       max="45"
                       matInput
                       placeholder="Heel angle of the red limit index..."
@@ -771,6 +776,7 @@
                       formControlName="heelAlarmAngle"
                     />
                     <span matTextSuffix>°</span>
+                    <mat-error>Must be above the caution angle</mat-error>
                   </mat-form-field>
                   <mat-form-field formGroupName="gauge">
                     <mat-label>Damping</mat-label>

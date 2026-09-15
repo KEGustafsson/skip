@@ -1,5 +1,6 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { IWidgetSvcConfig } from '../../core/interfaces/widgets-interface';
+import type { IPathUpdate } from '../../core/services/data.service';
 import { ITheme } from '../../core/services/app-service';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
 import { WidgetStreamsDirective, widgetPathSignature } from '../../core/directives/widget-streams.directive';
@@ -198,7 +199,7 @@ const FRAME_DESIGNS: Record<string, IGradientStop[]> = {
   styleUrls: ['./widget-sea-horizon.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class WidgetSeaHorizonComponent implements AfterViewInit {
+export class WidgetSeaHorizonComponent {
   // Host2 inputs
   public id = input.required<string>();
   public type = input.required<string>();
@@ -206,6 +207,7 @@ export class WidgetSeaHorizonComponent implements AfterViewInit {
 
   protected readonly runtime = inject(WidgetRuntimeDirective);
   private readonly streams = inject(WidgetStreamsDirective);
+  private readonly destroyRef = inject(DestroyRef);
 
   public static readonly DEFAULT_CONFIG: IWidgetSvcConfig = {
     supportAutomaticHistoricalSeries: false,
@@ -267,7 +269,13 @@ export class WidgetSeaHorizonComponent implements AfterViewInit {
   private pitchSignature: string | null = null;
   private rollSignature: string | null = null;
 
+  /**
+   * Whether the world and pointer groups animate between readings. Off until the first reading has
+   * painted, so the step from a level dial to the first real attitude is instant rather than a slow
+   * sweep up from zero; off again whenever the reading is lost or re-pointed, so recovery snaps too.
+   */
   protected readonly ready = signal(false);
+  private transitionFrame: number | null = null;
 
   protected readonly pitchDeg = computed(() => {
     const v = this.rawPitch();
@@ -433,11 +441,13 @@ export class WidgetSeaHorizonComponent implements AfterViewInit {
           this.pitchSignature = signature;
           this.rawPitch.set(null);
           this.lastPitchAt = null;
+          this.disarmTransitions();
         }
         if (!pathCfg?.path) return;
-        this.streams.observe('gaugePitchPath', pkt => {
-          this.rawPitch.set(this.damp(this.rawPitch(), pkt?.data?.value as number | null | undefined, 'pitch'));
-        }, 'pitch');
+        // The callback is a stable class field: the streams directive rebuilds the whole pipeline
+        // when it is handed a different function, so a fresh closure here would tear down and
+        // re-subscribe both paths on every unrelated config edit (finish, damping, an invert flag).
+        this.streams.observe('gaugePitchPath', this.onPitch, 'pitch');
       });
     });
 
@@ -451,19 +461,48 @@ export class WidgetSeaHorizonComponent implements AfterViewInit {
           this.rollSignature = signature;
           this.rawRoll.set(null);
           this.lastRollAt = null;
+          this.disarmTransitions();
         }
         if (!pathCfg?.path) return;
-        this.streams.observe('gaugeRollPath', pkt => {
-          this.rawRoll.set(this.damp(this.rawRoll(), pkt?.data?.value as number | null | undefined, 'roll'));
-        }, 'roll');
+        this.streams.observe('gaugeRollPath', this.onRoll, 'roll');
       });
+    });
+
+    this.destroyRef.onDestroy(() => this.disarmTransitions());
+  }
+
+  private readonly onPitch = (pkt: IPathUpdate): void => {
+    this.rawPitch.set(this.damp(this.rawPitch(), pkt?.data?.value as number | null | undefined, 'pitch'));
+    this.settleTransitions();
+  };
+
+  private readonly onRoll = (pkt: IPathUpdate): void => {
+    this.rawRoll.set(this.damp(this.rawRoll(), pkt?.data?.value as number | null | undefined, 'roll'));
+    this.settleTransitions();
+  };
+
+  /**
+   * Arm transitions one frame after a reading lands, so that reading is drawn without one and only
+   * later readings animate; drop them the moment the dial has nothing to show.
+   */
+  private settleTransitions(): void {
+    if (this.noData()) {
+      this.disarmTransitions();
+      return;
+    }
+    if (this.ready() || this.transitionFrame !== null) return;
+    this.transitionFrame = requestAnimationFrame(() => {
+      this.transitionFrame = null;
+      this.ready.set(true);
     });
   }
 
-  ngAfterViewInit(): void {
-    // Transitions stay off for the first paint, so the step from a level dial to the first real
-    // reading is instant rather than a slow sweep up from zero.
-    requestAnimationFrame(() => this.ready.set(true));
+  private disarmTransitions(): void {
+    if (this.transitionFrame !== null) {
+      cancelAnimationFrame(this.transitionFrame);
+      this.transitionFrame = null;
+    }
+    this.ready.set(false);
   }
 
   /**
