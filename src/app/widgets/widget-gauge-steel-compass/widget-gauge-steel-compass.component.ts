@@ -44,6 +44,7 @@ export class WidgetSteelCompassComponent {
   public static readonly DEFAULT_CONFIG: IWidgetSvcConfig = {
     displayName: 'Heading',
     filterSelfPaths: true,
+    supportAutomaticHistoricalSeries: true,
     paths: {
       gaugePath: {
         description: 'Heading',
@@ -92,7 +93,9 @@ export class WidgetSteelCompassComponent {
   protected readonly unitLabel = computed(() => {
     const path = normalizeWidgetPath(this.runtime.options()?.paths?.['gaugePath']?.path) ?? '';
     if (/Magnetic$/.test(path)) return '°M';
-    if (/True(Ground|Water|Water[A-Za-z]*)?$/.test(path)) return '°T';
+    // headingTrue and courseOverGroundTrue, plus the qualified wind angles: angleTrueWater,
+    // angleTrueWaterDamped, angleTrueGround.
+    if (/True[A-Za-z]*$/.test(path)) return '°T';
     return '°';
   });
 
@@ -134,7 +137,9 @@ export class WidgetSteelCompassComponent {
         // current value into a component that has just cleared itself.
         this.streams.observe('gaugePath', pkt => {
           const raw = (pkt?.data?.value as number) ?? null;
-          this.heading.set(raw === null ? null : toCompassDegrees(raw));
+          // A non-numeric reading would otherwise print "NaN" on the LCD and leave the pointer
+          // where it was: a misconfigured source is a no-reading, the same as a null.
+          this.heading.set(Number.isFinite(raw) ? toCompassDegrees(raw as number) : null);
         });
       });
     });

@@ -1474,6 +1474,7 @@
             "suppressBootstrapNull": true
           }
         },
+        "supportAutomaticHistoricalSeries": true,
         "updateInterval": 500
       },
       "defaultHeight": 6,

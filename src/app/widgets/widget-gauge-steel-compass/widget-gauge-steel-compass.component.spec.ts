@@ -81,6 +81,16 @@ describe('WidgetSteelCompassComponent', () => {
     expect(internals.headingText()).toBe('000');
   });
 
+  it('treats a non-numeric reading as no reading at all', () => {
+    capturedNext?.(update(47));
+    // A source publishing a non-numeric value would otherwise read as "NaN" on the LCD while the
+    // pointer stayed on the last real heading.
+    capturedNext?.(update(Number.NaN));
+
+    expect(internals.heading()).toBeNull();
+    expect(internals.headingText()).toBe('---');
+  });
+
   it('drops the previous path reading when the widget is re-pointed', () => {
     capturedNext?.(update(47));
     expect(internals.heading()).toBe(47);
