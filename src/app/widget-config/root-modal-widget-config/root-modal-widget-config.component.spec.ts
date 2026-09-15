@@ -11,6 +11,7 @@ import { MIN_UPDATE_INTERVAL_MS } from '../../core/interfaces/widgets-interface'
 import { WidgetBooleanSwitchComponent } from '../../widgets/widget-boolean-switch/widget-boolean-switch.component';
 import { WidgetZonesStatePanelComponent } from '../../widgets/widget-zones-state-panel/widget-zones-state-panel.component';
 import { WidgetAutopilotComponent } from '../../widgets/widget-autopilot/widget-autopilot.component';
+import { WidgetSteelCompassComponent } from '../../widgets/widget-gauge-steel-compass/widget-gauge-steel-compass.component';
 
 describe('ModalWidgetComponent', () => {
   let component: RootModalWidgetConfigComponent;
@@ -214,6 +215,41 @@ describe('ModalWidgetComponent Paths tab visibility (#416)', () => {
     // widget-boolean-switch / widget-zones-state-panel ship paths:[] and add paths via this tab.
     const component = createComponentWithData({ paths: [], multiChildCtrls: [] });
     expect(component.hasConfigurablePaths).toBe(true);
+  });
+});
+
+// The gauge settings tabs bind formControlName straight at the keys a widget ships in its
+// gauge group, so a key dropped from a DEFAULT_CONFIG breaks the dialog at runtime rather than at
+// build time. Locks the steel compass card controls against that.
+describe('ModalWidgetComponent steel compass gauge controls', () => {
+  const unitsServiceStub: Pick<UnitsService, 'getConversionsForPath'> = {
+    getConversionsForPath: (): IConversionPathList => ({ base: 'unitless', conversions: [] }),
+  };
+  const appServiceStub: Pick<AppService, 'configurableThemeColors'> = { configurableThemeColors: [] };
+
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('builds a control for every card option the Settings tab binds', () => {
+    TestBed.configureTestingModule({
+      imports: [RootModalWidgetConfigComponent],
+      providers: [
+        { provide: UnitsService, useValue: unitsServiceStub },
+        { provide: AppService, useValue: appServiceStub },
+        { provide: MAT_DIALOG_DATA, useValue: WidgetSteelCompassComponent.DEFAULT_CONFIG },
+        { provide: MatDialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+    ensureTestIconsReady();
+    const component = TestBed.createComponent(RootModalWidgetConfigComponent).componentInstance;
+    component.ngOnInit();
+
+    const gauge = component.formMaster.get('gauge') as UntypedFormGroup;
+    expect(gauge).toBeTruthy();
+    // Every key the compass Settings tab binds by name.
+    expect(gauge.get('degreeScale')?.value).toBe(true);
+    // The Classic Steel material keys, bound by the pickers the two widgets share.
+    expect(gauge.get('backgroundColor')?.value).toBe('carbon');
+    expect(gauge.get('faceColor')?.value).toBe('anthracite');
   });
 });
 
