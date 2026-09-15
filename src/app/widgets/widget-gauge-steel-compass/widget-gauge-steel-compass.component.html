@@ -1,0 +1,26 @@
+<div class="steel-compass" [class.stale]="heading() === null">
+  <gauge-steel
+    class="dial"
+    [widgetUUID]="id()"
+    subType="compass"
+    [rotateFace]="runtime.options()?.gauge?.rotateFace"
+    [degreeScale]="runtime.options()?.gauge?.degreeScale"
+    [roseVisible]="runtime.options()?.gauge?.roseVisible"
+    [backgroundColor]="runtime.options()?.gauge?.backgroundColor"
+    [frameColor]="runtime.options()?.gauge?.faceColor"
+    [value]="heading()"
+    [themeColors]="theme()"
+  ></gauge-steel>
+
+  <!-- Overlay, not canvas: the library's compass draws no readout of its own. Square and centred on
+       the same box the dial is sized to, so every offset below is a fraction of the card. -->
+  <div class="face">
+    @if (displayName()) {
+      <div class="face-title">{{ displayName() }}</div>
+    }
+    <div class="lcd">
+      <span class="lcd-unit">{{ unitLabel() }}</span>
+      <span class="lcd-value">{{ headingText() }}</span>
+    </div>
+  </div>
+</div>

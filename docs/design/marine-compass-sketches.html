@@ -161,6 +161,12 @@
     overflow: hidden;
   }
   .card.chosen { border-color: var(--accent); }
+  .card.built { border-color: var(--accent); }
+  .built-flag {
+    font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    background: var(--accent); color: var(--accent-ink);
+    padding: 2px 8px; border-radius: 3px; align-self: center;
+  }
   @media (min-width: 960px) {
     .card[data-key="D"] { grid-column: span 2; }
     .card[data-key="D"] .stage svg { width: calc(var(--gauge) * 1.22); height: calc(var(--gauge) * 1.22); }
@@ -257,7 +263,8 @@
       Five compass faces drawn in the Classic Steel idiom — black-metal bezel, anthracite dial,
       LCD window, red pointer — so the family reads with the existing <code>widget-gauge-steel</code>
       RPM face. Every dial below runs off one heading, so you can swing them together and see which
-      one still reads at a glance. Then tell me the letter and I'll build it.
+      one still reads at a glance. <strong>B is built</strong> and shipped as the Steel Compass
+      widget; the other four stay here as the alternatives it was picked over.
     </p>
   </header>
 </div>
@@ -340,7 +347,7 @@
 
   <footer class="verdict">
     <span class="lead">Selected for development</span>
-    <span id="verdict"><em>Nothing picked yet — hit “Choose this” on a card.</em></span>
+    <span id="verdict">B · Rotating Card <em>— built as the Steel Compass widget.</em></span>
   </footer>
 </div>
 
@@ -543,11 +550,11 @@
       }
     },
     {
-      key: 'B', name: 'Rotating Card',
+      key: 'B', name: 'Rotating Card', built: true,
       blurb: 'The card turns under a fixed lubber line, exactly like the binnacle compass — your heading is always the number at twelve o\'clock.',
       spec: [['Reads', 'navigation.headingMagnetic'],
              ['Renders with', 'steelseries Compass, rotate mode'],
-             ['Best at', '2×2 and up']],
+             ['Shipped as', 'widget-gauge-steel-compass']],
       draw: function (id, pal) {
         return defs(id, pal) + shell(id, pal) +
           '<circle cx="250" cy="250" r="199" fill="none" stroke="rgba(0,0,0,.3)" stroke-width="2"/>' +
@@ -722,16 +729,18 @@
     card.className = 'card';
     card.dataset.key = v.key;
     var specs = v.spec.map(function (row) {
-      return '<dt>' + row[0] + '</dt><dd>' + (row[0] === 'Reads' ? '<code>' + row[1] + '</code>' : row[1]) + '</dd>';
+      return '<dt>' + row[0] + '</dt><dd>' + (row[0] === 'Reads' || row[0] === 'Shipped as' ? '<code>' + row[1] + '</code>' : row[1]) + '</dd>';
     }).join('');
     card.innerHTML =
       '<div class="stage"></div>' +
       '<div class="card-body">' +
-        '<div class="card-head"><span class="tag">' + v.key + '</span><h2>' + v.name + '</h2></div>' +
+        '<div class="card-head"><span class="tag">' + v.key + '</span><h2>' + v.name + '</h2>' +
+        (v.built ? '<span class="built-flag">Built</span>' : '') + '</div>' +
         '<p>' + v.blurb + '</p>' +
         '<dl class="spec">' + specs + '</dl>' +
         '<button class="pick" type="button">Choose this</button>' +
       '</div>';
+    if (v.built) card.classList.add('built');
     grid.appendChild(card);
     mount(card.querySelector('.stage'), v, pal);
     card.querySelector('.pick').addEventListener('click', function () { choose(v.key); });
@@ -767,7 +776,7 @@
     });
     verdict.innerHTML = v
       ? v.key + ' · ' + v.name + ' <em>— say “build ' + v.key + '” and I\'ll take it from here.</em>'
-      : '<em>Nothing picked yet — hit “Choose this” on a card.</em>';
+      : 'B · Rotating Card <em>— built as the Steel Compass widget. Pick another card to change direction.</em>';
   }
   paint();
 
