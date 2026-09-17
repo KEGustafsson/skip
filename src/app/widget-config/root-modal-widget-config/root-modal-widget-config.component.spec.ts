@@ -12,6 +12,7 @@ import { WidgetBooleanSwitchComponent } from '../../widgets/widget-boolean-switc
 import { WidgetZonesStatePanelComponent } from '../../widgets/widget-zones-state-panel/widget-zones-state-panel.component';
 import { WidgetAutopilotComponent } from '../../widgets/widget-autopilot/widget-autopilot.component';
 import { WidgetSteelCompassComponent } from '../../widgets/widget-gauge-steel-compass/widget-gauge-steel-compass.component';
+import { WidgetSeaHorizonComponent } from '../../widgets/widget-sea-horizon/widget-sea-horizon.component';
 
 describe('ModalWidgetComponent', () => {
   let component: RootModalWidgetConfigComponent;
@@ -250,6 +251,78 @@ describe('ModalWidgetComponent steel compass gauge controls', () => {
     // The Classic Steel material keys, bound by the pickers the two widgets share.
     expect(gauge.get('backgroundColor')?.value).toBe('carbon');
     expect(gauge.get('faceColor')?.value).toBe('anthracite');
+  });
+});
+
+// The Sea Horizon heel-band pair is validated only by the template: each number input's [min]/[max]
+// follows the other field's live value, so the rule exists only once the Display tab has rendered.
+// Renders the dialog for real and drives both fields across each other so a dropped binding or a
+// dropped validator directive fails here instead of letting a crossed pair reach the widget.
+describe('ModalWidgetComponent sea horizon gauge controls', () => {
+  const unitsServiceStub: Pick<UnitsService, 'getConversionsForPath'> = {
+    getConversionsForPath: (): IConversionPathList => ({ base: 'unitless', conversions: [] }),
+  };
+  const appServiceStub: Pick<AppService, 'configurableThemeColors'> = { configurableThemeColors: [] };
+
+  beforeEach(() => TestBed.resetTestingModule());
+
+  function renderSeaHorizonDialog(): { component: RootModalWidgetConfigComponent; gauge: UntypedFormGroup } {
+    TestBed.configureTestingModule({
+      imports: [RootModalWidgetConfigComponent],
+      providers: [
+        { provide: UnitsService, useValue: unitsServiceStub },
+        { provide: AppService, useValue: appServiceStub },
+        { provide: MAT_DIALOG_DATA, useValue: structuredClone(WidgetSeaHorizonComponent.DEFAULT_CONFIG) },
+        { provide: MatDialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+    ensureTestIconsReady();
+    const fixture = TestBed.createComponent(RootModalWidgetConfigComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+    return { component, gauge: component.formMaster.get('gauge') as UntypedFormGroup };
+  }
+
+  it('builds a control for every gauge option the Display tab binds', () => {
+    const { gauge } = renderSeaHorizonDialog();
+    expect(gauge).toBeTruthy();
+    expect(gauge.get('invertPitch')?.value).toBe(false);
+    expect(gauge.get('invertRoll')?.value).toBe(false);
+    expect(gauge.get('noFrameVisible')?.value).toBe(true);
+    expect(gauge.get('heelCautionAngle')?.value).toBe(20);
+    expect(gauge.get('heelAlarmAngle')?.value).toBe(30);
+    expect(gauge.get('damping')?.value).toBe(0);
+    // The Classic Steel material keys, bound by the pickers the steel family shares.
+    expect(gauge.get('backgroundColor')?.value).toBe('carbon');
+    expect(gauge.get('faceColor')?.value).toBe('anthracite');
+  });
+
+  it('rejects a caution angle raised to or above the alarm angle', () => {
+    const { component, gauge } = renderSeaHorizonDialog();
+    const caution = gauge.get('heelCautionAngle');
+    expect(caution?.valid).toBe(true);
+
+    caution?.setValue(30);
+    expect(caution?.hasError('max')).toBe(true);
+    expect(component.formMaster.invalid).toBe(true);
+
+    caution?.setValue(29);
+    expect(caution?.valid).toBe(true);
+    expect(component.formMaster.valid).toBe(true);
+  });
+
+  it('rejects an alarm angle lowered to or below the caution angle', () => {
+    const { component, gauge } = renderSeaHorizonDialog();
+    const alarm = gauge.get('heelAlarmAngle');
+    expect(alarm?.valid).toBe(true);
+
+    alarm?.setValue(20);
+    expect(alarm?.hasError('min')).toBe(true);
+    expect(component.formMaster.invalid).toBe(true);
+
+    alarm?.setValue(21);
+    expect(alarm?.valid).toBe(true);
+    expect(component.formMaster.valid).toBe(true);
   });
 });
 
