@@ -496,6 +496,34 @@ describe('WidgetSeaHorizonComponent heel bands', () => {
     expect(h.component.limitIndexes()[0].x1).not.toBeCloseTo(before.index.x1, 6);
   });
 
+  // The two specs above pin the geometry; this pins the template's bindings to it, so a band or
+  // index that was computed correctly but rendered from something else would not pass unnoticed.
+  it('renders the bands and the limit index from that geometry', () => {
+    const h = mount(baseConfig({ heelCautionAngle: 12, heelAlarmAngle: 24 }));
+    const svg = h.fixture.nativeElement as HTMLElement;
+    const attr = (el: Element, name: string) => Number(el.getAttribute(name));
+
+    const paths = svg.querySelectorAll('.bands path');
+    expect(paths).toHaveLength(6);
+    h.component.heelBands().forEach((band, i) => {
+      expect(paths[i].getAttribute('d')).toBe(band.d);
+      expect(paths[i].getAttribute('fill')).toBe(band.fill);
+    });
+    expect(paths[2].getAttribute('d')?.startsWith(arcStart(BAND_R_OUTER, 12))).toBe(true);
+
+    const lines = svg.querySelectorAll('.limit-index line');
+    expect(lines).toHaveLength(2);
+    const [ox, oy] = polar(LIMIT_R_OUTER, 24);
+    expect(attr(lines[0], 'x1')).toBeCloseTo(ox, 6);
+    expect(attr(lines[0], 'y1')).toBeCloseTo(oy, 6);
+    expect(attr(lines[1], 'x1')).toBeCloseTo(300 - ox, 6);
+
+    h.options.set(baseConfig({ heelCautionAngle: 15, heelAlarmAngle: 35 }));
+    h.fixture.detectChanges();
+    expect(svg.querySelectorAll('.bands path')[2].getAttribute('d')?.startsWith(arcStart(BAND_R_OUTER, 15))).toBe(true);
+    expect(attr(svg.querySelectorAll('.limit-index line')[0], 'x1')).toBeCloseTo(polar(LIMIT_R_OUTER, 35)[0], 6);
+  });
+
   it('defaults to a cruising band when the angles are missing', () => {
     const h = mount(baseConfig());
     expect(h.component.cautionAngle()).toBe(20);
@@ -776,6 +804,16 @@ describe('WidgetSeaHorizonComponent texture scale', () => {
   it('divides out the scale the frameless face is drawn under', () => {
     expect(paintedAt(300, 300, { noFrameVisible: true }).texturePatternTransform()).toBe('scale(1.00000)');
     expect(paintedAt(300, 300, { noFrameVisible: false }).texturePatternTransform()).toBe('scale(0.83000)');
+  });
+
+  it('binds the measured scale to the texture pattern itself', () => {
+    TestBed.resetTestingModule();
+    const h = mount(baseConfig({ noFrameVisible: true, backgroundColor: 'carbon' }));
+    measure?.(600, 600);
+    h.fixture.detectChanges();
+    const pattern = (h.fixture.nativeElement as HTMLElement).querySelector('pattern');
+    expect(pattern?.getAttribute('patternTransform')).toBe('scale(0.50000)');
+    expect(pattern?.getAttribute('patternTransform')).toBe(h.component.texturePatternTransform());
   });
 
   it('falls back to the authored size when nothing ever measures the widget', () => {
