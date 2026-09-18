@@ -101,6 +101,10 @@
         <stop [attr.offset]="s.o" [attr.stop-color]="s.c" />
       }
     </radialGradient>
+    <!-- The vignette runs from x = radius to x = width - radius (124.766 to 175.234 here), not
+         across the face: that is drawBackground.js's own createLinearGradient(radius, 0, width -
+         radius, 0), reproduced as is. With the default pad spread the flanks outside that span
+         sit at the end stops' 25% black, which is exactly the darkened sides the real gauge has. -->
     <linearGradient
       [attr.id]="ids().vignette" gradientUnits="userSpaceOnUse"
       [attr.x1]="faceShadowR" y1="0" [attr.x2]="300 - faceShadowR" y2="0"

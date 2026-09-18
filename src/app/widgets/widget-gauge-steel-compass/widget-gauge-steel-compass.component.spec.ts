@@ -95,6 +95,7 @@ describe('WidgetSteelCompassComponent', () => {
   it('drops the previous path reading when the widget is re-pointed', () => {
     capturedNext?.(update(47));
     expect(internals.heading()).toBe(47);
+    expect(internals.cardRotation()).toBe(-47);
 
     // The new path reports nothing: suppressBootstrapNull filters its replayed leading null, so the
     // stream callback never runs and only the re-point clear can remove the old heading.
@@ -103,6 +104,19 @@ describe('WidgetSteelCompassComponent', () => {
 
     expect(internals.heading()).toBeNull();
     expect(internals.headingText()).toBe('---');
+    // The card too: left at 047 under a `---` it would read as the new path's heading. Back on 000
+    // and dimmed, it is the stale state the stylesheet describes.
+    expect(internals.cardRotation()).toBe(0);
+  });
+
+  it('turns the short way from 000 once a re-pointed path starts reporting', () => {
+    capturedNext?.(update(47));
+    options.set(makeConfig('self.navigation.courseOverGroundTrue'));
+    fixture.detectChanges();
+
+    capturedNext?.(update(350));
+    // From the reset card, 350 is 10 degrees to port, not 350 to starboard.
+    expect(internals.cardRotation()).toBe(10);
   });
 
   it('keeps the reading across an unrelated config edit on the same path', () => {
@@ -207,13 +221,23 @@ describe('WidgetSteelCompassComponent', () => {
   });
 
   it('still prints a readable card with no steelseries on the page', () => {
-    // The library is a browser global loaded from index.html; under jsdom it is absent. The case
-    // goes unpainted, but the card must not come out with undefined colours.
-    options.set({ ...makeConfig(), gauge: { type: 'steelCompass', backgroundColor: 'white', faceColor: 'chrome' } });
-    fixture.detectChanges();
+    // The library is a browser global loaded from index.html, absent until that script has run. The
+    // test setup installs a stand-in for every spec, so it has to be taken away here for the guard
+    // to be the branch under test rather than the stand-in's missing colour objects.
+    const page = globalThis as { steelseries?: unknown };
+    const shim = page.steelseries;
+    delete page.steelseries;
+    try {
+      options.set({ ...makeConfig(), gauge: { type: 'steelCompass', backgroundColor: 'white', faceColor: 'chrome' } });
+      fixture.detectChanges();
 
-    expect(internals.ink().label).toBeTruthy();
-    expect(internals.cardLabels().every(l => !!l.fill)).toBe(true);
+      // The fallback ink, not undefined: the case goes unpainted, the card does not go blank.
+      expect(internals.ink().label).toBe('#FFFFFF');
+      expect(internals.ink().index).toBe('#D8232A');
+      expect(internals.cardLabels().every(l => !!l.fill)).toBe(true);
+    } finally {
+      page.steelseries = shim;
+    }
   });
 
   it('is fed degrees off a radian path', () => {
@@ -254,7 +278,12 @@ describe('shortestTurn', () => {
     expect(shortestTurn(90, 0)).toBe(-90);
   });
 
-  it('resolves the half turn consistently rather than oscillating', () => {
-    expect(Math.abs(shortestTurn(0, 180))).toBe(180);
+  it('resolves the half turn the same way from either side rather than oscillating', () => {
+    // Exactly a half turn has no shorter way round; the formula always takes it to port, and takes
+    // it to port again on the way back, so a heading flapping across the reciprocal never sees the
+    // card wind up.
+    expect(shortestTurn(0, 180)).toBe(-180);
+    expect(shortestTurn(180, 0)).toBe(-180);
+    expect(shortestTurn(90, 270)).toBe(-180);
   });
 });

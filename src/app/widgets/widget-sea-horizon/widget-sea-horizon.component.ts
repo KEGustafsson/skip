@@ -3,7 +3,7 @@ import { IWidgetSvcConfig } from '../../core/interfaces/widgets-interface';
 import type { IPathUpdate } from '../../core/services/data.service';
 import { ITheme } from '../../core/services/app-service';
 import { WidgetRuntimeDirective } from '../../core/directives/widget-runtime.directive';
-import { WidgetStreamsDirective, widgetPathSignature } from '../../core/directives/widget-streams.directive';
+import { WidgetStreamsDirective, widgetPathSignature, WidgetRepointTracker } from '../../core/directives/widget-streams.directive';
 
 /**
  * Sea Horizon — a marine attitude indicator.
@@ -81,6 +81,13 @@ const COLOR_ALARM = '#CE2A20';
 
 const DEFAULT_CAUTION_ANGLE = 20;
 const DEFAULT_ALARM_ANGLE = 30;
+/**
+ * Longest damping time constant honoured, in seconds. The settings panel offers up to 5; the stored
+ * value is not otherwise bounded (the dashboard schema publishes it as a plain number, and external
+ * tools write dashboards against that), and a constant of hours would freeze the dial on its first
+ * sample. Twice the panel's largest option is generous for a hull in a seaway and still visibly live.
+ */
+const MAX_DAMPING_S = 10;
 const DEFAULT_FRAME_DESIGN = 'anthracite';
 
 export interface IGradientStop { o: string; c: string; }
@@ -658,8 +665,14 @@ export class WidgetSeaHorizonComponent {
   private readonly rawRoll = signal<number | null>(null);
   private lastPitchAt: number | null = null;
   private lastRollAt: number | null = null;
-  private pitchSignature: string | null = null;
-  private rollSignature: string | null = null;
+  /**
+   * Path identity behind each reading; see {@link WidgetRepointTracker}. Both paths ship with
+   * `isPathConfigurable: false`, so today only a source change or a stored-config edit can re-point
+   * them — the trackers exist so the widget clears correctly if that ever stops being true, without
+   * a second copy of the rule the three ng-gauges and the steel compass share.
+   */
+  private readonly pitchRepoint = new WidgetRepointTracker();
+  private readonly rollRepoint = new WidgetRepointTracker();
 
   /**
    * Whether the world and pointer groups animate between readings. Off until the first reading has
@@ -961,8 +974,7 @@ export class WidgetSeaHorizonComponent {
         // A re-point rebuilds the subscription, but suppressBootstrapNull filters the replayed
         // leading null — against a path that reports nothing the callback never runs, and the
         // previous path's reading would stay on the dial as a live reading of the new one.
-        if (signature !== this.pitchSignature) {
-          this.pitchSignature = signature;
+        if (this.pitchRepoint.repointed(signature)) {
           this.rawPitch.set(null);
           this.lastPitchAt = null;
           this.disarmTransitions();
@@ -981,8 +993,7 @@ export class WidgetSeaHorizonComponent {
       const pathCfg = cfg.paths?.['gaugeRollPath'];
       const signature = widgetPathSignature(pathCfg);
       untracked(() => {
-        if (signature !== this.rollSignature) {
-          this.rollSignature = signature;
+        if (this.rollRepoint.repointed(signature)) {
           this.rawRoll.set(null);
           this.lastRollAt = null;
           this.disarmTransitions();
@@ -999,13 +1010,20 @@ export class WidgetSeaHorizonComponent {
   /**
    * Track the painted edge length for the texture tiles. `preserveAspectRatio="xMidYMid meet"` puts
    * the instrument in the largest square that fits, so that is the smaller of the two box sides.
+   *
+   * Floored to whole pixels: `contentRect` is fractional, and during a drag every frame would
+   * otherwise carry a new value and re-tile the face. A sub-pixel difference in a 12px tile is
+   * invisible, and an unchanged whole number is dropped by the signal's own equality check, so a
+   * drag re-tiles only when the side actually crosses a pixel — the same "skip a resize that does
+   * not change the side" rule the steel compass applies, without its repaint debounce, which is
+   * there for the library's layer rebuild and has nothing to gate here.
    */
   private observePaintedSize(): void {
     if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(entries => {
       const box = entries[0]?.contentRect;
       if (!box) return;
-      const painted = Math.min(box.width, box.height);
+      const painted = Math.floor(Math.min(box.width, box.height));
       if (painted > 0) this.paintedPx.set(painted);
     });
     observer.observe(this.host.nativeElement as HTMLElement);
@@ -1049,13 +1067,23 @@ export class WidgetSeaHorizonComponent {
   }
 
   /**
+   * The damping time constant as honoured, in seconds: the stored value confined to [0, MAX_DAMPING_S]
+   * the same way the heel angles are confined to the scale, so an off-menu value cannot freeze the
+   * dial. Anything that is not a finite number is no damping.
+   */
+  private readonly dampingSeconds = computed(() => {
+    const raw = this.runtime.options()?.gauge?.damping;
+    return clamp(typeof raw === 'number' && isFinite(raw) ? raw : 0, 0, MAX_DAMPING_S);
+  });
+
+  /**
    * Exponential smoothing with a configurable time constant. Attitude off a real IMU in a seaway is
    * noisy at a level an aviation instrument never has to handle, and an undamped dial in 20 knots
    * reads as broken. A time constant of 0 passes the sample straight through.
    */
   private damp(previous: number | null, next: number | null | undefined, axis: 'pitch' | 'roll'): number | null {
     if (next == null || !isFinite(next)) return null;
-    const tau = this.runtime.options()?.gauge?.damping ?? 0;
+    const tau = this.dampingSeconds();
     const now = Date.now();
     const last = axis === 'pitch' ? this.lastPitchAt : this.lastRollAt;
     if (axis === 'pitch') this.lastPitchAt = now; else this.lastRollAt = now;

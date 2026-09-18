@@ -132,7 +132,10 @@ export class WidgetSteelCompassComponent implements OnDestroy {
   private readonly streams = inject(WidgetStreamsDirective);
   private readonly canvas = inject(CanvasService);
 
-  private readonly caseCanvas = viewChild.required<ElementRef<HTMLCanvasElement>>('caseCanvas');
+  // Not `required`: the destroy hook below reads it, and a required query that has not resolved
+  // throws NG0951 there and aborts the rest of the teardown. Absent, there is simply nothing to
+  // paint or release.
+  private readonly caseCanvas = viewChild<ElementRef<HTMLCanvasElement>>('caseCanvas');
 
   /**
    * Side of the square dial, in CSS pixels. Both layers are sized to it: the library paints the
@@ -230,8 +233,11 @@ export class WidgetSteelCompassComponent implements OnDestroy {
     };
   });
 
-  /** Card rotation. Negative because the card turns against the heading to bring it under the index. */
-  protected readonly cardRotation = computed(() => -this.turned());
+  /**
+   * Card rotation. Negated because the card turns against the heading to bring it under the index;
+   * as a subtraction rather than a unary minus so a card reset to 0 rotates by 0, not -0.
+   */
+  protected readonly cardRotation = computed(() => 0 - this.turned());
 
   /** Unique per instance: two compasses on one dashboard must not share gradient ids. */
   protected readonly gradientId = computed(() => `sc-${this.id()}`);
@@ -289,10 +295,16 @@ export class WidgetSteelCompassComponent implements OnDestroy {
   /** Path identity behind the reading below; see {@link WidgetRepointTracker}. */
   private readonly repoint = new WidgetRepointTracker();
 
-  /** Drop the reading when the widget is re-pointed at another path (#585). */
+  /**
+   * Drop the reading when the widget is re-pointed at another path (#585). Both halves of it: the
+   * LCD and the card are separate signals, and clearing only the number would leave the card turned
+   * to the old path's bearing under a `---`, which reads as a live heading with a dead readout. The
+   * card goes back to 000 and dims, which is the stale state the stylesheet describes.
+   */
   private clearReadingOnRepoint(signature: string | null): void {
     if (!this.repoint.repointed(signature)) return;
     this.heading.set(null);
+    this.turned.set(0);
   }
 
   /** Apply a new heading, turning the card the short way round from wherever it is. */
@@ -327,7 +339,8 @@ export class WidgetSteelCompassComponent implements OnDestroy {
       this.resizeTimer = null;
     }
     // Same release the Classic Steel gauge does, so a removed tile frees its backing store.
-    this.canvas.releaseCanvas(this.caseCanvas().nativeElement, { clear: true, removeFromDom: false });
+    const canvas = this.caseCanvas()?.nativeElement;
+    if (canvas) this.canvas.releaseCanvas(canvas, { clear: true, removeFromDom: false });
   }
 
   /**
@@ -348,7 +361,8 @@ export class WidgetSteelCompassComponent implements OnDestroy {
     // A partial global (the unit tests' stand-in) has the names but not the painters.
     if (!frame || !background) return;
 
-    const canvas = this.caseCanvas().nativeElement;
+    const canvas = this.caseCanvas()?.nativeElement;
+    if (!canvas) return;
     canvas.width = side;
     canvas.height = side;
     const ctx = canvas.getContext('2d');

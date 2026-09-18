@@ -51,6 +51,24 @@ const ATTITUDE_PATHS = {
 /** Radii the component lays out against: its dial design radius and the steelseries face shading. */
 const DIAL_DESIGN_R = 112;
 const FACE_SHADOW_R = 124.766;
+/** Where the heel bands and the limit index sit on that dial, as the component rules them. */
+const BAND_R_OUTER = DIAL_DESIGN_R - 8;
+const LIMIT_R_OUTER = DIAL_DESIGN_R - 2;
+const LIMIT_R_INNER = DIAL_DESIGN_R - 20;
+const COLOR_CAUTION = '#E8912B';
+const COLOR_ALARM = '#CE2A20';
+
+/** The component's own polar frame: degrees from 12 o'clock, clockwise positive, about (150, 150). */
+function polar(r: number, deg: number): [number, number] {
+  const a = (deg - 90) * Math.PI / 180;
+  return [150 + r * Math.cos(a), 150 + r * Math.sin(a)];
+}
+
+/** Where a band's arc begins, as its path data prints it. */
+function arcStart(r: number, deg: number): string {
+  const [x, y] = polar(r, deg);
+  return `M${x.toFixed(2)},${y.toFixed(2)}`;
+}
 
 type GaugeOverrides = Partial<NonNullable<IWidgetSvcConfig['gauge']>>;
 
@@ -153,6 +171,17 @@ describe('WidgetSeaHorizonComponent stream wiring', () => {
     expect(h.component.heelText()).toBe('18.4° STBD');
     expect(h.component.trimText()).toBe('TRIM −2.6°');
     expect(h.component.noData()).toBe(false);
+  });
+
+  it('signs the trim both ways, bow-up positive and bow-down negative', () => {
+    const h = mount(baseConfig());
+    h.emit('gaugePitchPath', 2.6);
+    expect(h.component.trimText()).toBe('TRIM +2.6°');
+    h.emit('gaugePitchPath', -2.6);
+    expect(h.component.trimText()).toBe('TRIM −2.6°');
+    // Level carries the plus: a trim readout with no sign at all would look like a lost one.
+    h.emit('gaugePitchPath', 0);
+    expect(h.component.trimText()).toBe('TRIM +0.0°');
   });
 
   it('names the low side rather than the sign, and calls a level boat level', () => {
@@ -423,6 +452,50 @@ describe('WidgetSeaHorizonComponent heel bands', () => {
     expect(h.component.alarmAngle()).toBe(24);
   });
 
+  // The angles above are what the settings panel shows; this is what the dial draws. Without tying
+  // the two together a band geometry that stopped following the config would leave both green
+  // while the panel said 35° and the dial drew 30°.
+  it('draws the bands and the limit index at the configured angles', () => {
+    const h = mount(baseConfig({ heelCautionAngle: 12, heelAlarmAngle: 24 }));
+    const bands = h.component.heelBands();
+
+    // Starboard first, then its port mirror, for each of nominal, caution, alarm.
+    const caution = bands[2];
+    const alarm = bands[4];
+    expect(caution.fill).toBe(COLOR_CAUTION);
+    expect(caution.d.startsWith(arcStart(BAND_R_OUTER, 12))).toBe(true);
+    expect(alarm.fill).toBe(COLOR_ALARM);
+    expect(alarm.d.startsWith(arcStart(BAND_R_OUTER, 24))).toBe(true);
+    expect(bands[5].fill).toBe(COLOR_ALARM);
+    expect(bands[5].d.startsWith(arcStart(BAND_R_OUTER, -45 - 1))).toBe(true);
+
+    const [starboard, port] = h.component.limitIndexes();
+    const [ox, oy] = polar(LIMIT_R_OUTER, 24);
+    const [ix, iy] = polar(LIMIT_R_INNER, 24);
+    expect(starboard.x1).toBeCloseTo(ox, 6);
+    expect(starboard.y1).toBeCloseTo(oy, 6);
+    expect(starboard.x2).toBeCloseTo(ix, 6);
+    expect(starboard.y2).toBeCloseTo(iy, 6);
+    // Mirrored about the vertical axis, at the same height.
+    expect(port.x1).toBeCloseTo(300 - ox, 6);
+    expect(port.y1).toBeCloseTo(oy, 6);
+  });
+
+  it('moves the bands and the limit index when the angles change', () => {
+    const h = mount(baseConfig({ heelCautionAngle: 12, heelAlarmAngle: 24 }));
+    const before = { bands: h.component.heelBands(), index: h.component.limitIndexes()[0] };
+
+    h.options.set(baseConfig({ heelCautionAngle: 15, heelAlarmAngle: 35 }));
+    h.fixture.detectChanges();
+
+    expect(h.component.heelBands()[2].d.startsWith(arcStart(BAND_R_OUTER, 15))).toBe(true);
+    expect(h.component.heelBands()[4].d.startsWith(arcStart(BAND_R_OUTER, 35))).toBe(true);
+    expect(h.component.heelBands()[2].d).not.toBe(before.bands[2].d);
+    const [x] = polar(LIMIT_R_OUTER, 35);
+    expect(h.component.limitIndexes()[0].x1).toBeCloseTo(x, 6);
+    expect(h.component.limitIndexes()[0].x1).not.toBeCloseTo(before.index.x1, 6);
+  });
+
   it('defaults to a cruising band when the angles are missing', () => {
     const h = mount(baseConfig());
     expect(h.component.cautionAngle()).toBe(20);
@@ -479,6 +552,28 @@ describe('WidgetSeaHorizonComponent damping', () => {
     h.emit('gaugeRollPath', 20);
     h.emit('gaugeRollPath', null);
     expect(h.component.heelText()).toBe('--');
+  });
+
+  // The panel offers up to 5 s, but the stored number is unbounded and other tools write it: a
+  // constant of hours would park the dial on its first sample for good.
+  it('confines an off-menu time constant so the dial stays live', () => {
+    let clock = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => clock);
+
+    const h = mount(baseConfig({ damping: 1e9 }));
+    h.emit('gaugeRollPath', 0);
+    clock += 10_000; // one capped time constant later
+    h.emit('gaugeRollPath', 10);
+
+    // Damped as if the constant were 10 s: alpha = 1 - e^-1, the same step the 1 s case takes.
+    expect(h.component.heelText()).toBe('6.3° STBD');
+  });
+
+  it('treats a damping value that is not a number as no damping', () => {
+    const h = mount(baseConfig({ damping: 'fast' as unknown as number }));
+    h.emit('gaugeRollPath', 10);
+    h.emit('gaugeRollPath', 30);
+    expect(h.component.heelText()).toBe('30.0° STBD');
   });
 });
 
@@ -668,6 +763,12 @@ describe('WidgetSeaHorizonComponent texture scale', () => {
   it('measures the square the instrument is actually painted into', () => {
     expect(paintedAt(600, 200).texturePatternTransform()).toBe('scale(1.50000)');
     expect(paintedAt(200, 600).texturePatternTransform()).toBe('scale(1.50000)');
+  });
+
+  // contentRect is fractional, so a drag would otherwise hand the pattern a new scale every frame.
+  it('measures in whole pixels, so a sub-pixel resize does not re-tile the face', () => {
+    expect(paintedAt(200.4, 600).texturePatternTransform()).toBe('scale(1.50000)');
+    expect(paintedAt(200.9, 600).texturePatternTransform()).toBe('scale(1.50000)');
   });
 
   // With the case hidden the face is painted inside a group that scales it up to the whole tile,
